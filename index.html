@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="//js.jotform.com/JotFormCustomWidget.min.js"></script>
+    <style>
+        #file-input { font-family: sans-serif; padding: 10px; border: 2px dashed #007bff; width: 100%; cursor: pointer; }
+        #status { font-family: sans-serif; font-size: 14px; margin-top: 10px; color: #555; }
+    </style>
+</head>
+<body>
+    <input type="file" id="file-input">
+    <div id="status">Ready to upload...</div>
+
+    <script>
+        const WORKER_URL = "https://https://bunny-uploader.datasrisaradamath.workers.dev/";
+
+        document.getElementById('file-input').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const status = document.getElementById('status');
+            status.textContent = "Uploading securely...";
+
+            const uniqueName = `${Date.now()}-${file.name}`;
+
+            try {
+                const response = await fetch(`${WORKER_URL}?file=${encodeURIComponent(uniqueName)}`, {
+                    method: 'PUT',
+                    body: file
+                });
+
+                if (response.ok) {
+                    status.textContent = "✅ Upload Successful!";
+                    // Tell Jotform the filename so it's saved in your submission
+                    JFCustomWidget.sendSubmit({ valid: true, value: uniqueName });
+                } else {
+                    status.textContent = "❌ Upload Failed.";
+                }
+            } catch (err) {
+                status.textContent = "❌ Connection Error.";
+            }
+        });
+
+        JFCustomWidget.subscribe("ready", () => console.log("Secure Widget Active"));
+    </script>
+</body>
+</html>
