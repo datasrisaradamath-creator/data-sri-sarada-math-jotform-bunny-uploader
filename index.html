@@ -3,193 +3,131 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Competition Entry</title>
+    <title>Competition Registrations 2026</title>
+    <script src="https://cdn.jsdelivr.net/npm/tus-js-client@latest/dist/tus.min.js"></script>
     <style>
-        :root {
-            --primary-color: #4a90e2;
-            --success-color: #27ae60;
-            --text-color: #333;
-            --bg-color: #f9f9f9;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            margin: 0;
-            padding: 15px;
-            display: flex;
-            justify-content: center;
-        }
-        .container {
-            width: 100%;
-            max-width: 500px;
-            background: white;
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-        }
-        h2 { margin-top: 0; font-size: 1.5rem; color: var(--primary-color); }
-        
+        :root { --primary: #4a90e2; --success: #27ae60; --bg: #f4f7f6; }
+        body { font-family: sans-serif; background: var(--bg); display: flex; justify-content: center; padding: 20px; }
+        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 100%; max-width: 500px; }
+        h2 { color: var(--primary); margin-top: 0; text-align: center; }
         .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 0.9rem; }
-        
-        input, select {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            box-sizing: border-box;
-            font-size: 1rem;
-        }
-        
-        .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-
-        #uploadBtn {
-            width: 100%;
-            background-color: var(--primary-color);
-            color: white;
-            border: none;
-            padding: 12px;
-            font-size: 1rem;
-            font-weight: 600;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: background 0.3s;
-            margin-top: 10px;
-        }
-        #uploadBtn:disabled { background-color: #ccc; cursor: not-allowed; }
-
-        #statusContainer {
-            margin-top: 20px;
-            display: none;
-            text-align: center;
-        }
-        progress { width: 100%; height: 20px; border-radius: 10px; }
-        #statusText { font-size: 0.9rem; margin-top: 8px; color: #666; }
-        
-        .success-msg { color: var(--success-color); font-weight: bold; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 14px; }
+        input, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        .name-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        #uploadBtn { width: 100%; background: var(--primary); color: white; border: none; padding: 15px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        #uploadBtn:disabled { background: #ccc; }
+        #progressContainer { margin-top: 20px; display: none; }
+        progress { width: 100%; height: 20px; accent-color: var(--primary); }
+        #statusText { text-align: center; margin-top: 10px; font-size: 14px; color: #666; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>Competition Entry</h2>
+<div class="card">
+    <h2>Registrations 2026</h2>
     
     <div class="form-group">
-        <label>Full Name</label>
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;">
-            <input type="text" id="firstName" placeholder="First Name">
-            <input type="text" id="middleName" placeholder="Middle Name">
-            <input type="text" id="surname" placeholder="Surname">
+        <label>Student Full Name</label>
+        <div class="name-grid">
+            <input type="text" id="fName" placeholder="First">
+            <input type="text" id="mName" placeholder="Middle">
+            <input type="text" id="sName" placeholder="Surname">
         </div>
     </div>
 
-    <div class="row">
-        <div class="form-group">
+    <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <div>
             <label>Standard</label>
-            <select id="standard">
+            <select id="std">
                 <option value="">Select</option>
-                <option value="1">Class 1</option>
-                <option value="2">Class 2</option>
-                <option value="3">Class 3</option>
-                <option value="4">Class 4</option>
-                <option value="5">Class 5</option>
+                <option value="1">Class 1</option><option value="2">Class 2</option>
+                <option value="3">Class 3</option><option value="4">Class 4</option>
             </select>
         </div>
-        <div class="form-group">
+        <div>
             <label>Division</label>
-            <input type="text" id="division" placeholder="e.g. A">
+            <input type="text" id="div" placeholder="e.g. A">
         </div>
     </div>
 
     <div class="form-group">
-        <label>Video File (Max 2GB)</label>
+        <label>Video (Up to 3GB - MP4/MOV)</label>
         <input type="file" id="videoFile" accept="video/*">
     </div>
 
-    <button id="uploadBtn" onclick="handleEntry()">Upload Entry</button>
+    <button id="uploadBtn" onclick="startSecureUpload()">Submit Entry</button>
 
-    <div id="statusContainer">
-        <progress id="progressBar" value="0" max="100"></progress>
-        <div id="statusText">Preparing upload...</div>
+    <div id="progressContainer">
+        <progress id="progBar" value="0" max="100"></progress>
+        <div id="statusText">Initializing...</div>
     </div>
 </div>
 
 <script>
-    // --- CONFIGURATION ---
+    // --- SET THESE ---
     const WORKER_URL = "https://bunny-uploader.datasrisaradamath.workers.dev";
-    const LIBRARY_ID = "YOUR_LIBRARY_ID"; // Get from Bunny Stream API tab
-    const STREAM_API_KEY = "YOUR_STREAM_API_KEY"; // Get from Bunny Stream API tab
 
-    async function handleEntry() {
+    async function startSecureUpload() {
         const file = document.getElementById('videoFile').files[0];
-        const fName = document.getElementById('firstName').value;
-        const mName = document.getElementById('middleName').value;
-        const sName = document.getElementById('surname').value;
-        const std = document.getElementById('standard').value;
-        const div = document.getElementById('division').value;
+        const firstName = document.getElementById('fName').value;
+        const surname = document.getElementById('sName').value;
 
-        if (!file || !fName || !sName || !std) {
-            alert("Please fill in all required fields and select a video.");
-            return;
-        }
+        if (!file || !firstName || !surname) return alert("Please complete the form!");
 
-        // UI Setup
         const btn = document.getElementById('uploadBtn');
         const statusText = document.getElementById('statusText');
-        const progBar = document.getElementById('progressBar');
         btn.disabled = true;
-        document.getElementById('statusContainer').style.display = 'block';
+        document.getElementById('progressContainer').style.display = 'block';
 
         try {
-            // 1. Get Video ticket from Worker
-            const title = `${sName}_${fName}_Std${std}`;
+            // 1. Get TUS Signature from Worker
+            statusText.innerText = "Securing connection...";
             const authReq = await fetch(WORKER_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: title })
+                body: JSON.stringify({ title: `${surname}_${firstName}_2026` })
             });
-            const { guid: videoId } = await authReq.json();
+            const creds = await authReq.json();
 
-            // 2. Direct Upload to Bunny Stream
-            const xhr = new XMLHttpRequest();
-            xhr.open('PUT', `https://video.bunnycdn.com/library/${LIBRARY_ID}/videos/${videoId}`, true);
-            xhr.setRequestHeader('AccessKey', STREAM_API_KEY);
-
-            xhr.upload.onprogress = (e) => {
-                const percent = Math.round((e.loaded / e.total) * 100);
-                progBar.value = percent;
-                statusText.innerText = `Uploading Video: ${percent}%`;
-            };
-
-            xhr.onload = () => {
-                if (xhr.status === 200) {
-                    statusText.innerHTML = `<span class="success-msg">✅ Success! Video ID: ${videoId}</span>`;
+            // 2. Start TUS Resumable Upload
+            const upload = new tus.Upload(file, {
+                endpoint: "https://video.bunnycdn.com/tusupload",
+                retryDelays: [0, 3000, 5000, 10000, 20000],
+                headers: {
+                    AuthorizationSignature: creds.signature,
+                    AuthorizationExpire: creds.expirationTime,
+                    VideoId: creds.videoId,
+                    LibraryId: creds.libraryId,
+                },
+                metadata: { filename: file.name, filetype: file.type },
+                onError: (err) => {
+                    statusText.innerText = "Error: " + err;
+                    btn.disabled = false;
+                },
+                onProgress: (bytesSent, bytesTotal) => {
+                    const pct = ((bytesSent / bytesTotal) * 100).toFixed(1);
+                    document.getElementById('progBar').value = pct;
+                    statusText.innerText = `Uploading: ${pct}% (Resumable)`;
+                },
+                onSuccess: () => {
+                    statusText.innerHTML = "<b style='color:green'>✅ Upload Complete!</b>";
                     
-                    // 3. Send data to Jotform
+                    // 3. Notify Jotform
                     window.parent.postMessage({
                         action: 'set_value',
-                        value: videoId,
-                        fields: {
-                            'fullName': `${fName} ${mName} ${sName}`,
-                            'standard': std,
-                            'division': div,
-                            'videoId': videoId
-                        }
+                        value: creds.videoId,
+                        fields: { 'videoId': creds.videoId, 'studentName': firstName + " " + surname }
                     }, "*");
-                } else {
-                    statusText.innerText = "❌ Upload Failed. Check keys.";
-                    btn.disabled = false;
                 }
-            };
-            xhr.send(file);
+            });
 
-        } catch (err) {
-            statusText.innerText = "❌ Error: " + err.message;
+            upload.start();
+
+        } catch (e) {
+            statusText.innerText = "Fatal Error: " + e.message;
             btn.disabled = false;
         }
     }
 </script>
-
 </body>
 </html>
