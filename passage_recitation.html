@@ -196,28 +196,39 @@
             return; 
         }
 
-        // Reach out to Jotform to get the School Name
-        JFCustomWidget.getFieldsValueByTitles(['School Name'], async function(fields) {
-            const school = fields['School Name'] || "unknown_school";
-            const passageRecitation = "passage_recitation"; // Hardcoded file name part
+        const area = document.getElementById(uid === 'initial' ? 'up-initial' : `up-${uid}`);
+        area.innerHTML = `Initializing...`;
+
+        // 1. USE THE FIELD ID DIRECTLY (#input_16)
+        // We remove the '#' and just use 'input_16'
+        JFCustomWidget.getFieldsValueById(['input_16'], async function(fields) {
             
-            // Helper to clean and lowercase strings
-            const clean = (str) => str.toLowerCase().replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_');
+            // 2. Grab the value or use fallback
+            let schoolRaw = fields['input_16'] || "unknown_school";
+            
+            // Helper to clean: lowercase, underscores, no special chars
+            const clean = (str) => {
+                if (!str) return "";
+                return str.toString().toLowerCase().trim().replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_');
+            };
 
-            const safeSchool = clean(school);
+            const safeSchool = clean(schoolRaw);
             const safeFName = clean(fName);
+            const passageRecitation = "passage_recitation";
 
-            const area = document.getElementById(uid === 'initial' ? 'up-initial' : `up-${uid}`);
+            // school_passage_recitation_studentname_std8
+            const videoTitle = `${safeSchool}_${passageRecitation}_${safeFName}_std${stdVal}`;
+
             area.innerHTML = `Uploading... <span id="p-${uid}">0%</span>`;
 
             try {
-                // Final Name Format: school_passage_recitation_studentname_std8
-                const videoTitle = `${safeSchool}_${passageRecitation}_${safeFName}_std${stdVal}`;
-                
                 const res = await fetch(`${WORKER_URL}/sign`, { 
                     method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ title: videoTitle }) 
                 });
+                
+                if (!res.ok) throw new Error("Worker rejected the request");
                 
                 const creds = await res.json();
                 
@@ -230,17 +241,24 @@
                         LibraryId: creds.libraryId 
                     },
                     onProgress: (s, t) => { 
-                        document.getElementById(`p-${uid}`).innerText = Math.round((s/t)*100) + "%"; 
+                        const pct = Math.round((s/t)*100);
+                        const pSpan = document.getElementById(`p-${uid}`);
+                        if (pSpan) pSpan.innerText = pct + "%"; 
                     },
                     onSuccess: () => {
                         area.innerHTML = `<div class="uploaded-badge">✓ Video Uploaded</div>`;
                         videoData[uid] = { videoId: creds.videoId };
                         sync();
+                    },
+                    onError: (err) => {
+                        alert("Upload failed: " + err);
+                        // Reset upload button
+                        area.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">`;
                     }
                 }).start();
             } catch (e) { 
-                alert("Upload error."); 
-                console.error(e);
+                alert("Connection error: Make sure your Worker URL is correct."); 
+                area.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">`;
             }
         });
     }
