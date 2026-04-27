@@ -5,53 +5,67 @@
     <script src="//js.jotform.com/JotFormCustomWidget.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tus-js-client@latest/dist/tus.min.js"></script>
     <style>
-        /* Jotform CSS Reset: Minimizes default widget padding */
-        html, body { margin: 0; padding: 0; background: transparent; }
-        body { font-family: -apple-system, sans-serif; padding: 5px 15px 10px 5px; }
+        html, body { margin: 0; padding: 0; background: transparent; overflow-x: hidden; }
         
-        #widget-wrap { display: flex; flex-direction: column; gap: 20px; width: 100%; }
+        /* Fixed Padding: Reduced right padding to 5px for more space */
+        body { 
+            font-family: -apple-system, sans-serif; 
+            padding: 25px 5px 10px 5px; 
+        }
+        
+        #widget-wrap { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 20px; 
+            width: 100%; 
+            box-sizing: border-box;
+        }
 
-        #student-list { display: flex; flex-direction: column; gap: 25px; }
+        #student-list { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 30px; 
+            width: 100%;
+        }
 
-        /* Clear Marker & Spacing for Entries */
         .student-block { 
             position: relative;
-            padding: 25px 20px; 
+            padding: 25px 15px; /* Slightly tighter internal padding */
             border: 1px solid #e1e4e8;
             border-radius: 12px;
             background: #ffffff;
             box-shadow: 0 2px 8px rgba(0,0,0,0.04);
             display: flex;
-            flex-direction: column;
+            flex-direction: column; 
             gap: 18px;
+            box-sizing: border-box;
         }
 
-        /* Smart Student Count Badge */
         .student-count-badge {
             position: absolute;
-            top: -12px;
-            left: 20px;
+            top: -14px;
+            left: 15px;
             background: #4a5568;
             color: white;
-            padding: 2px 12px;
+            padding: 4px 14px;
             border-radius: 20px;
             font-size: 11px;
             font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         .name-row { 
             display: grid; 
             grid-template-columns: 1fr 1fr 1fr; 
-            gap: 15px; 
+            gap: 12px; 
         }
 
         .meta-row { 
             display: grid; 
-            grid-template-columns: 1fr 1fr 120px auto; 
-            gap: 15px; 
-            align-items: end;
+            grid-template-columns: 1fr 1fr 100px auto; 
+            gap: 12px; 
+            align-items: end; 
         }
 
         @media screen and (max-width: 650px) {
@@ -59,7 +73,7 @@
             .ref-delete-btn { width: 100%; justify-content: center; }
         }
 
-        label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 8px; color: #333; }
+        label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px; color: #333; text-transform: uppercase; }
         label span { color: #d73a49; } 
         
         input, select { 
@@ -67,27 +81,19 @@
             font-size: 14px; background: #fafbfc; height: 40px; box-sizing: border-box;
         }
 
-        /* Delete Button with Text */
         .ref-delete-btn { 
             background: #f7fafc; color: #e53e3e; border: 1px solid #feb2b2; 
             border-radius: 6px; cursor: pointer; display: flex; align-items: center; 
             gap: 6px; height: 40px; padding: 0 12px; font-size: 13px; font-weight: 600;
-            transition: all 0.2s;
         }
-        .ref-delete-btn:hover { background: #fff5f5; border-color: #fc8181; }
-        .ref-delete-btn svg { stroke: #e53e3e; }
 
-        .upload-area { 
-            padding: 15px; border: 2px dashed #3498db; border-radius: 8px; background: #f1f7fd; 
-        }
+        .upload-area { padding: 15px; border: 2px dashed #3498db; border-radius: 8px; background: #f1f7fd; }
 
         .btn-add { 
-            background: #4a5568; color: white; border: none;
+            background: #4a5568; color: white; border: none; 
             padding: 14px 28px; border-radius: 8px; cursor: pointer; 
-            font-weight: bold; font-size: 14px; width: fit-content;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            font-weight: bold; width: fit-content; margin-top: 10px;
         }
-        .btn-add:hover { background: #2d3748; }
 
         .uploaded-badge { 
             display: inline-flex; align-items: center; background: #e6f4ea; 
@@ -99,51 +105,10 @@
 
 <div id="widget-wrap">
     <div id="student-list">
-        </div>
-    <button type="button" class="btn-add" onclick="addNewStudent()">+ Add Student</button>
-</div>
-
-<script>
-    const WORKER_URL = "https://your-worker.workers.dev"; 
-    const TRASH_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
-    
-    let videoData = {}; // Stores video IDs by block unique ID
-
-    function updateFrameHeight() {
-        setTimeout(() => {
-            const height = document.body.scrollHeight + 30;
-            JFCustomWidget.requestFrameResize({ width: '100%', height: height });
-        }, 50);
-    }
-
-    function refreshIndices() {
-        const rows = document.querySelectorAll('.student-block');
-        rows.forEach((row, index) => {
-            // Update the Visual Counter (Student 1, Student 2...)
-            row.querySelector('.student-count-badge').innerText = `Student ${index + 1}`;
-            
-            // Toggle Delete button visibility
-            const delCol = row.querySelector('.del-col');
-            if (rows.length > 1) {
-                delCol.innerHTML = `<button type="button" class="ref-delete-btn" onclick="removeRow('${row.id}')">${TRASH_ICON} Delete Student</button>`;
-            } else {
-                delCol.innerHTML = '';
-            }
-        });
-        updateFrameHeight();
-    }
-
-    function addNewStudent() {
-        const list = document.getElementById('student-list');
-        const uid = "u" + Date.now(); // Unique internal ID
-        
-        const block = document.createElement('div');
-        block.className = 'student-block';
-        block.id = uid;
-        block.innerHTML = `
-            <div class="student-count-badge">Student</div>
+        <div class="student-block" id="row-initial">
+            <div class="student-count-badge">Student 1</div>
             <div class="name-row">
-                <div><label>First Name<span>*</span></label><input type="text" class="fName" oninput="sync()"></div>
+                <div><label>First Name<span>*</span></label><input type="text" class="fName" placeholder="Enter first name" oninput="sync()"></div>
                 <div><label>Middle Name</label><input type="text" class="mName" oninput="sync()"></div>
                 <div><label>Surname</label><input type="text" class="sName" oninput="sync()"></div>
             </div>
@@ -161,11 +126,53 @@
                 <div><label>Division</label><input type="text" class="div" oninput="sync()"></div>
                 <div class="del-col"></div>
             </div>
-            <div class="upload-area" id="up-${uid}">
+            <div class="upload-area" id="up-initial">
                 <label>Upload Video<span>*</span></label>
-                <input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">
+                <input type="file" accept="video/*" onchange="handleUpload('initial', this.files[0])">
             </div>
-        `;
+        </div>
+    </div>
+    <button type="button" class="btn-add" onclick="addNewStudent()">+ Add Student</button>
+</div>
+
+<script>
+    const WORKER_URL = "https://your-worker.workers.dev"; // UPDATE THIS
+    const TRASH_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+    
+    let videoData = {}; 
+
+    function updateFrameHeight() {
+        setTimeout(() => {
+            JFCustomWidget.requestFrameResize({ width: '100%', height: document.body.scrollHeight + 40 });
+        }, 150);
+    }
+
+    function refreshIndices() {
+        const rows = document.querySelectorAll('.student-block');
+        rows.forEach((row, index) => {
+            row.querySelector('.student-count-badge').innerText = `Student ${index + 1}`;
+            const delCol = row.querySelector('.del-col');
+            if (rows.length > 1) {
+                delCol.innerHTML = `<button type="button" class="ref-delete-btn" onclick="removeRow('${row.id}')">${TRASH_ICON} Delete</button>`;
+            } else {
+                delCol.innerHTML = '';
+            }
+        });
+        updateFrameHeight();
+    }
+
+    function addNewStudent() {
+        const list = document.getElementById('student-list');
+        const uid = "u" + Date.now();
+        // Clone the initial row
+        const block = document.getElementById('row-initial').cloneNode(true);
+        block.id = uid;
+        block.querySelectorAll('input').forEach(i => i.value = '');
+        block.querySelectorAll('select').forEach(s => s.selectedIndex = 0);
+        
+        const uploadArea = block.querySelector('.upload-area');
+        uploadArea.id = `up-${uid}`;
+        uploadArea.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">`;
         
         list.appendChild(block);
         refreshIndices();
@@ -173,31 +180,25 @@
     }
 
     function removeRow(uid) {
-        const row = document.getElementById(uid);
-        if (row) {
-            row.remove();
-            delete videoData[uid];
-            refreshIndices();
-            sync();
-        }
+        document.getElementById(uid).remove();
+        delete videoData[uid];
+        refreshIndices();
+        sync();
     }
 
     async function handleUpload(uid, file) {
-        const row = document.getElementById(uid);
+        const row = document.getElementById(uid === 'initial' ? 'row-initial' : uid);
         const fName = row.querySelector('.fName').value;
         const stdVal = row.querySelector('.std').value;
         if (!file || !fName || !stdVal) { alert("Enter Name and Standard first."); return; }
         
-        const area = document.getElementById(`up-${uid}`);
-        area.innerHTML = `<div style="font-size:14px;">Uploading <b>${file.name}</b>... <span id="p-${uid}">0%</span></div>`;
+        const area = document.getElementById(uid === 'initial' ? 'up-initial' : `up-${uid}`);
+        area.innerHTML = `Uploading... <span id="p-${uid}">0%</span>`;
 
         try {
-            const res = await fetch(`${WORKER_URL}/sign`, {
-                method: 'POST',
-                body: JSON.stringify({ title: `${fName}_Std${stdVal}_Passage` })
-            });
+            const res = await fetch(`${WORKER_URL}/sign`, { method: 'POST', body: JSON.stringify({ title: `${fName}_Std${stdVal}` }) });
             const creds = await res.json();
-            const upload = new tus.Upload(file, {
+            new tus.Upload(file, {
                 endpoint: "https://video.bunnycdn.com/tusupload",
                 headers: { AuthorizationSignature: creds.signature, AuthorizationExpire: creds.expirationTime, VideoId: creds.videoId, LibraryId: creds.libraryId },
                 onProgress: (s, t) => { document.getElementById(`p-${uid}`).innerText = Math.round((s/t)*100) + "%"; },
@@ -206,28 +207,38 @@
                     videoData[uid] = { videoId: creds.videoId };
                     sync();
                 }
-            });
-            upload.start();
+            }).start();
         } catch (e) { alert("Upload error."); }
     }
 
     function sync() {
         const out = [];
+        let allValid = true;
+
         document.querySelectorAll('.student-block').forEach((row) => {
-            const vId = videoData[row.id]?.videoId;
+            const rowId = row.id === 'row-initial' ? 'initial' : row.id;
+            const fName = row.querySelector('.fName').value;
+            const gender = row.querySelector('.gender').value;
+            const std = row.querySelector('.std').value;
+            const vId = videoData[rowId]?.videoId;
+
+            // Mark as invalid if required data is missing
+            if (!fName || !gender || !std || !vId) {
+                allValid = false;
+            }
+
             if (vId) {
-                out.push({
-                    firstName: row.querySelector('.fName').value,
-                    standard: row.querySelector('.std').value,
-                    videoId: vId
-                });
+                out.push({ firstName: fName, standard: std, videoId: vId });
             }
         });
-        JFCustomWidget.sendData({ value: JSON.stringify(out) });
+
+        // Send value only if ALL students are complete
+        const finalValue = allValid && out.length > 0 ? JSON.stringify(out) : "";
+        JFCustomWidget.sendData({ value: finalValue });
     }
 
     JFCustomWidget.subscribe("ready", () => {
-        addNewStudent(); // Load one student by default
+        refreshIndices();
     });
 </script>
 </body>
