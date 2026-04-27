@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="//js.jotform.com/JotFormCustomWidget.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tus-js-client@latest/dist/tus.min.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #ffffff; margin: 0; padding: 5px; color: #333; }
+        .student-card { border: 1px solid #e1e4e8; padding: 15px; margin-bottom: 20px; border-radius: 8px; background: #fff; position: relative; }
+        .form-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+        .field-group { flex: 1 1 180px; display: flex; flex-direction: column; }
+        .small-field { flex: 1 1 80px; }
+        label { font-size: 13px; font-weight: 600; margin-bottom: 5px; color: #555; }
+        label span { color: #e74c3c; }
+        input, select { padding: 10px; border: 1px solid #d1d5db; border-radius: 5px; font-size: 14px; outline: none; background: #fff; }
+        .delete-btn { position: absolute; top: 10px; right: 10px; background: none; border: none; color: #ff4d4d; font-size: 20px; cursor: pointer; }
+        .upload-section { margin-top: 15px; padding: 15px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; display: flex; flex-direction: column; align-items: center; min-height: 80px; justify-content: center; }
+        .upload-action-box { border: 2px dashed #3498db; width: 95%; padding: 15px; border-radius: 5px; text-align: center; }
+        .btn-add { background: #b0bac9; color: white; border: none; padding: 12px 24px; border-radius: 5px; cursor: pointer; font-weight: bold; width: 100%; max-width: 200px; }
+        progress { width: 100%; height: 8px; border-radius: 4px; margin-top: 5px; }
+        .uploaded-badge { display: inline-flex; align-items: center; background-color: #f0faf5; color: #1a7f53; padding: 8px 16px; border-radius: 20px; border: 1px solid #c7ebd1; font-size: 14px; font-weight: 500; margin-top: 10px; }
+        .uploaded-badge svg { margin-right: 8px; width: 16px; height: 16px; fill: currentColor; }
+        .file-name-display { font-size: 13px; color: #5f6368; margin-bottom: 8px; word-break: break-all; text-align: center; font-style: italic; display: block; }
+    </style>
+</head>
+<body>
+
+    <div id="student-list"></div>
+    <button type="button" class="btn-add" id="addBtn">+ Add Student</button>
+
+<script>
+    const CHECKMARK_SVG = `<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>`;
+    const WORKER_URL = "https://your-worker.workers.dev";
+    let students = [];
+    const STDS = [8, 9, 10]; // SENIOR RANGE
+
+    JFCustomWidget.subscribe("ready", () => {
+        // Automatically add first student if list is empty
+        if (students.length === 0) addNewStudent();
+    });
+
+    function addNewStudent() {
+        students.push({ fName: '', mName: '', sName: '', gender: '', std: '', div: '', videoId: null, localFileName: null });
+        render();
+    }
+
+    function render() {
+        const list = document.getElementById('student-list');
+        list.innerHTML = '';
+        students.forEach((s, i) => {
+            const card = document.createElement('div');
+            card.className = 'student-card';
+            card.innerHTML = `
+                <button class="delete-btn" type="button" onclick="removeStudent(${i})">🗑️</button>
+                <div class="form-row">
+                    <div class="field-group"><label>First Name<span>*</span></label><input type="text" value="${s.fName}" oninput="update(${i}, 'fName', this.value)"></div>
+                    <div class="field-group"><label>Middle Name</label><input type="text" value="${s.mName}" oninput="update(${i}, 'mName', this.value)"></div>
+                    <div class="field-group"><label>Surname</label><input type="text" value="${s.sName}" oninput="update(${i}, 'sName', this.value)"></div>
+                </div>
+                <div class="form-row">
+                    <div class="field-group small-field">
+                        <label>Gender<span>*</span></label>
+                        <select onchange="update(${i}, 'gender', this.value)">
+                            <option value="">Select</option>
+                            <option value="Male" ${s.gender === 'Male' ? 'selected' : ''}>Male</option>
+                            <option value="Female" ${s.gender === 'Female' ? 'selected' : ''}>Female</option>
+                        </select>
+                    </div>
+                    <div class="field-group small-field">
+                        <label>Standard<span>*</span></label>
+                        <select onchange="update(${i}, 'std', this.value)">
+                            <option value="">Std</option>
+                            ${STDS.map(opt => `<option value="${opt}" ${s.std == opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="field-group small-field"><label>Division</label><input type="text" value="${s.div}" oninput="update(${i}, 'div', this.value)"></div>
+                </div>
+                <div class="upload-section" id="upload-sec-${i}">
+                    ${s.videoId ? `<span class="file-name-display">File: ${s.localFileName}</span><div class="uploaded-badge">${CHECKMARK_SVG} Video Uploaded</div>` : 
+                    `<div class="upload-action-box"><label>Upload Video (Compulsory)<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload(${i}, this.files[0])"></div>`}
+                </div>
+            `;
+            list.appendChild(card);
+        });
+        syncToJotform();
+    }
+
+    async function handleUpload(index, file) {
+        if (!file || !students[index].fName || !students[index].std || !students[index].gender) {
+            alert("Please complete Name, Gender, and Standard before uploading.");
+            render(); return;
+        }
+        const section = document.getElementById(`upload-sec-${index}`);
+        section.innerHTML = `<span class="file-name-display">File: ${file.name}</span><div class="upload-action-box"><progress id="bar-${index}" value="0" max="100"></progress><div id="txt-${index}" style="font-size:11px;">Uploading...</div></div>`;
+        
+        students[index].tempLocalName = file.name;
+        const safeName = students[index].fName.replace(/\s+/g, '_');
+        const customTitle = `${safeName}_Std${students[index].std}_${students[index].gender}_Junior`.replace(/\s+/g, '_');
+
+        const res = await fetch(`${WORKER_URL}/sign`, { method: 'POST', body: JSON.stringify({ title: customTitle }) });
+        const creds = await res.json();
+
+        const upload = new tus.Upload(file, {
+            endpoint: "https://video.bunnycdn.com/tusupload",
+            headers: { AuthorizationSignature: creds.signature, AuthorizationExpire: creds.expirationTime, VideoId: creds.videoId, LibraryId: creds.libraryId },
+            onProgress: (sent, total) => {
+                const pct = Math.round((sent/total)*100);
+                document.getElementById(`bar-${index}`).value = pct;
+                document.getElementById(`txt-${index}`).innerText = pct + "%";
+            },
+            onSuccess: () => {
+                students[index].videoId = creds.videoId;
+                students[index].localFileName = students[index].tempLocalName;
+                render();
+            }
+        });
+        upload.start();
+    }
+
+    function removeStudent(index) {
+        if (students[index].videoId) fetch(`${WORKER_URL}/delete?id=${students[index].videoId}`, { method: 'POST' }).catch(()=>{});
+        students.splice(index, 1);
+        if (students.length === 0) addNewStudent();
+        render();
+    }
+
+    function update(i, key, val) { students[i][key] = val; syncToJotform(); }
+    function syncToJotform() { JFCustomWidget.sendData({ value: JSON.stringify(students.filter(s => s.videoId)) }); }
+    document.getElementById('addBtn').onclick = addNewStudent;
+</script>
+</body>
+</html>
