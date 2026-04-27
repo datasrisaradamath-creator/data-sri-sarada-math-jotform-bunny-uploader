@@ -6,30 +6,37 @@
     <style>
         body { font-family: -apple-system, sans-serif; background: #ffffff; margin: 0; padding: 10px; }
         
+        /* SMOOTH SCROLLING PARAMETERS */
         #widget-container { 
             overflow-x: auto; 
             width: 100%; 
             border: 1px solid #e1e4e8; 
             border-radius: 8px; 
             padding-bottom: 20px;
+            /* Physics-based smooth scrolling */
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch; 
+            /* Optional: Snap to rows when scrolling */
+            scroll-snap-type: x proximity; 
         }
         
         #student-list { 
-            min-width: 900px; /* Increased to ensure no overlapping */
+            min-width: 950px; /* Locked width to prevent rendering bugs */
             padding: 10px;
         }
 
         .student-row { 
             display: grid; 
-            /* Adjusted columns: Names are flexible, Gender/Standard/Div are fixed widths */
-            grid-template-columns: 1fr 1fr 1fr 120px 120px 100px 50px; 
+            /* Fixed column widths to prevent the "buggy" look from your image */
+            grid-template-columns: 180px 180px 180px 120px 120px 100px 50px; 
             gap: 15px; 
             align-items: end; 
             padding: 20px 0; 
-            border-bottom: 2px solid #f6f8fa; 
+            border-bottom: 2px solid #f6f8fa;
+            scroll-snap-align: start;
         }
 
-        label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 8px; color: #333; }
+        label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 8px; color: #333; white-space: nowrap; }
         label span { color: #d73a49; } 
         
         input, select { 
@@ -43,7 +50,7 @@
             box-sizing: border-box;
         }
 
-        /* The Trash/Delete Button from your image */
+        /* Trash/Delete Button matching your reference exactly */
         .ref-delete-btn { 
             background: #b0bac9; 
             color: #ffffff; 
@@ -55,7 +62,7 @@
             justify-content: center; 
             height: 40px; 
             width: 44px;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
+            transition: background 0.2s;
         }
         .ref-delete-btn:hover { background: #9da7b8; }
 
@@ -68,12 +75,12 @@
             background: #f1f7fd; 
         }
 
-        /* The Grey-Blue Add Student Button from your image */
+        /* Grey-Blue Add Student Button from your image */
         .btn-add { 
             background: #b0bac9; 
             color: white; 
             border: 1px solid #a0abbc;
-            padding: 10px 20px; 
+            padding: 10px 24px; 
             border-radius: 6px; 
             cursor: pointer; 
             margin-top: 20px; 
@@ -81,7 +88,7 @@
             font-size: 14px;
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 8px;
         }
         .btn-add:hover { background: #9da7b8; }
         
