@@ -6,31 +6,31 @@
     <style>
         body { font-family: -apple-system, sans-serif; background: #ffffff; margin: 0; padding: 10px; }
         
-        /* Container that allows horizontal scrolling for the grid */
         #widget-container { 
             overflow-x: auto; 
             width: 100%; 
             border: 1px solid #e1e4e8; 
             border-radius: 8px; 
-            padding-bottom: 10px;
+            padding-bottom: 20px;
         }
         
         #student-list { 
-            min-width: 850px; /* Forces the horizontal scroll on small screens */
+            min-width: 900px; /* Increased to ensure no overlapping */
             padding: 10px;
         }
 
         .student-row { 
             display: grid; 
-            grid-template-columns: 180px 180px 180px 110px 90px 90px 50px; 
-            gap: 12px; 
+            /* Adjusted columns: Names are flexible, Gender/Standard/Div are fixed widths */
+            grid-template-columns: 1fr 1fr 1fr 120px 120px 100px 50px; 
+            gap: 15px; 
             align-items: end; 
             padding: 20px 0; 
             border-bottom: 2px solid #f6f8fa; 
         }
 
-        label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #444; }
-        label span { color: #d73a49; } /* The Red asterisk */
+        label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 8px; color: #333; }
+        label span { color: #d73a49; } 
         
         input, select { 
             width: 100%; 
@@ -39,45 +39,51 @@
             border-radius: 6px; 
             font-size: 14px; 
             background: #fafbfc;
+            height: 40px;
+            box-sizing: border-box;
         }
 
-        /* Blue-Grey Delete Button per your reference image */
+        /* The Trash/Delete Button from your image */
         .ref-delete-btn { 
             background: #b0bac9; 
             color: #ffffff; 
             border: 1px solid #a0abbc; 
-            padding: 8px; 
             border-radius: 6px; 
             cursor: pointer; 
             display: flex; 
             align-items: center; 
             justify-content: center; 
-            height: 38px; 
+            height: 40px; 
             width: 44px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
         }
         .ref-delete-btn:hover { background: #9da7b8; }
 
         .upload-area { 
             grid-column: 1 / 5; 
             margin-top: 15px; 
-            padding: 12px; 
+            padding: 15px; 
             border: 2px dashed #3498db; 
             border-radius: 6px; 
             background: #f1f7fd; 
         }
 
+        /* The Grey-Blue Add Student Button from your image */
         .btn-add { 
             background: #b0bac9; 
             color: white; 
-            border: none; 
-            padding: 12px 24px; 
+            border: 1px solid #a0abbc;
+            padding: 10px 20px; 
             border-radius: 6px; 
             cursor: pointer; 
             margin-top: 20px; 
             font-weight: bold; 
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
+        .btn-add:hover { background: #9da7b8; }
         
         .uploaded-badge { 
             display: inline-flex; 
@@ -89,7 +95,6 @@
             border: 1px solid #c3e6cb; 
             font-weight: bold; 
             font-size: 13px; 
-            margin-top: 5px; 
         }
     </style>
 </head>
@@ -111,9 +116,9 @@
             <div><label>Standard<span>*</span></label>
                 <select class="std" onchange="sync()">
                     <option value="">Select</option>
-                    <option value="5">5</option>
-                    <option value="6">6</option>
-                    <option value="7">7</option>
+                    <option value="8">5</option>
+                    <option value="9">6</option>
+                    <option value="10">7</option>
                 </select>
             </div>
             <div><label>Division</label><input type="text" class="div" oninput="sync()"></div>
@@ -130,8 +135,8 @@
 <button type="button" class="btn-add" onclick="addNewStudent()">+ Add Student</button>
 
 <script>
-    const WORKER_URL = "https://your-worker.workers.dev"; // ⚠️ REPLACE THIS WITH YOUR URL
-    const TRASH_ICON = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`;
+    const WORKER_URL = "https://your-worker.workers.dev"; // UPDATE THIS
+    const TRASH_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
     let videoData = [{}];
 
     function addNewStudent() {
@@ -139,20 +144,13 @@
         const index = list.children.length;
         const newRow = list.children[0].cloneNode(true);
         newRow.id = `row-${index}`;
-        
-        // Reset fields
         newRow.querySelectorAll('input').forEach(i => i.value = '');
         newRow.querySelectorAll('select').forEach(s => s.selectedIndex = 0);
-        
-        // Add Delete Button to the empty div at index 6
         const cols = newRow.querySelectorAll('div');
         cols[6].innerHTML = `<button type="button" class="ref-delete-btn" onclick="removeRow(${index})">${TRASH_ICON}</button>`;
-        
-        // Reset Upload Section
         const uploadArea = newRow.querySelector('.upload-area');
         uploadArea.id = `upload-sec-${index}`;
         uploadArea.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload(${index}, this.files[0])">`;
-        
         list.appendChild(newRow);
         videoData.push({});
         sync();
@@ -166,34 +164,22 @@
     async function handleUpload(index, file) {
         const row = document.getElementById(`row-${index}`);
         const fName = row.querySelector('.fName').value;
-        const std = row.querySelector('.std').value;
-        
-        if (!file || !fName || !std) {
-            alert("Please provide First Name and Standard before uploading.");
-            return;
-        }
+        const stdVal = row.querySelector('.std').value;
+        if (!file || !fName || !stdVal) { alert("Please enter First Name and Standard."); return; }
 
         const area = document.getElementById(`upload-sec-${index}`);
-        area.innerHTML = `<div>Uploading: ${file.name}... <span id="p-${index}">0%</span></div>`;
+        area.innerHTML = `<div style="font-size:13px;">Uploading: ${file.name}... <strong id="p-${index}">0%</strong></div>`;
 
         try {
             const res = await fetch(`${WORKER_URL}/sign`, {
                 method: 'POST',
-                body: JSON.stringify({ title: `${fName}_Std${std}_StoryTelling` })
+                body: JSON.stringify({ title: `${fName}_Standard${stdVal}_Passage` })
             });
             const creds = await res.json();
-
             const upload = new tus.Upload(file, {
                 endpoint: "https://video.bunnycdn.com/tusupload",
-                headers: {
-                    AuthorizationSignature: creds.signature,
-                    AuthorizationExpire: creds.expirationTime,
-                    VideoId: creds.videoId,
-                    LibraryId: creds.libraryId
-                },
-                onProgress: (s, t) => {
-                    document.getElementById(`p-${index}`).innerText = Math.round((s/t)*100) + "%";
-                },
+                headers: { AuthorizationSignature: creds.signature, AuthorizationExpire: creds.expirationTime, VideoId: creds.videoId, LibraryId: creds.libraryId },
+                onProgress: (s, t) => { document.getElementById(`p-${index}`).innerText = Math.round((s/t)*100) + "%"; },
                 onSuccess: () => {
                     area.innerHTML = `<div class="uploaded-badge">✓ Video Uploaded</div>`;
                     videoData[index] = { videoId: creds.videoId };
@@ -201,30 +187,23 @@
                 }
             });
             upload.start();
-        } catch (err) {
-            alert("Upload initialization failed. Check Worker URL.");
-            console.error(err);
-        }
+        } catch (e) { alert("Upload failed."); }
     }
 
     function sync() {
-        const results = [];
+        const out = [];
         document.querySelectorAll('.student-row').forEach((row, i) => {
-            const videoId = videoData[i]?.videoId;
-            if (videoId) {
-                results.push({
-                    firstName: row.querySelector('.fName').value,
+            if (videoData[i]?.videoId) {
+                out.push({
+                    name: row.querySelector('.fName').value,
                     standard: row.querySelector('.std').value,
-                    videoId: videoId
+                    videoId: videoData[i].videoId
                 });
             }
         });
-        JFCustomWidget.sendData({ value: JSON.stringify(results) });
+        JFCustomWidget.sendData({ value: JSON.stringify(out) });
     }
-
-    JFCustomWidget.subscribe("ready", () => {
-        sync();
-    });
+    JFCustomWidget.subscribe("ready", sync);
 </script>
 </body>
 </html>
