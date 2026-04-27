@@ -174,9 +174,10 @@
             // We don't even need to wait for this (no 'await'), 
             // just fire the request so the user doesn't feel a delay.
             fetch(`${WORKER_URL}/delete`, {
-                method: 'POST', // Or 'DELETE' depending on your worker setup
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ videoId: vId })
-            }).catch(err => console.log("Clean-up failed, likely already gone."));
+            })
         }
 
         // 3. Remove the student entry from the screen
