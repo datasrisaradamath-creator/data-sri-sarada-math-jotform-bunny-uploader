@@ -63,6 +63,9 @@
     const TRASH_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
     
     let videoData = {}; 
+    // We store the 'initial' HTML as a string so we can always clone it, 
+    // even if the first student is deleted.
+    const rowTemplate = document.getElementById('row-initial').cloneNode(true);
 
     const resizeObserver = new ResizeObserver(() => {
         const height = document.body.offsetHeight + 40; 
@@ -75,6 +78,7 @@
         rows.forEach((row, index) => {
             row.querySelector('.student-count-badge').innerText = `Student ${index + 1}`;
             const delCol = row.querySelector('.del-col');
+            // Only show delete if there's more than one row OR if it's not the last remaining row
             if (rows.length > 1) {
                 delCol.innerHTML = `<button type="button" class="ref-delete-btn" onclick="removeRow('${row.id}')">${TRASH_ICON} Delete Student</button>`;
             } else {
@@ -83,21 +87,42 @@
         });
     }
 
-    function addNewStudent() {
+    // UPDATED: Now accepts optional 'data' to persist values
+    function addNewStudent(savedData = null) {
         const list = document.getElementById('student-list');
-        const uid = "u" + Date.now();
-        const block = document.getElementById('row-initial').cloneNode(true);
+        const uid = savedData ? (savedData.uid || "u" + Date.now()) : "u" + Date.now();
+        
+        // Always clone from our "safe" template, not the live DOM
+        const block = rowTemplate.cloneNode(true);
         block.id = uid;
-        block.querySelectorAll('input').forEach(i => i.value = '');
-        block.querySelectorAll('select').forEach(s => s.selectedIndex = 0);
+        
+        if (savedData) {
+            block.querySelector('.fName').value = savedData.firstName || "";
+            block.querySelector('.mName').value = savedData.middleName || "";
+            block.querySelector('.sName').value = savedData.surname || "";
+            block.querySelector('.gender').value = savedData.gender || "";
+            block.querySelector('.std').value = savedData.standard || "";
+            block.querySelector('.div').value = savedData.division || "";
+            
+            if (savedData.videoId) {
+                videoData[uid] = { videoId: savedData.videoId };
+                const area = block.querySelector('.upload-area');
+                area.id = `up-${uid}`;
+                area.innerHTML = `<div class="uploaded-badge">✓ Video Uploaded</div>`;
+            }
+        } else {
+            block.querySelectorAll('input').forEach(i => i.value = '');
+            block.querySelectorAll('select').forEach(s => s.selectedIndex = 0);
+        }
         
         const uploadArea = block.querySelector('.upload-area');
-        uploadArea.id = `up-${uid}`;
-        uploadArea.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">`;
+        if (!savedData?.videoId) {
+            uploadArea.id = `up-${uid}`;
+            uploadArea.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">`;
+        }
         
         list.appendChild(block);
         refreshIndices();
-        sync();
     }
 
     async function removeRow(uid) {
@@ -117,15 +142,8 @@
     }
 
     async function handleUpload(uid, file) {
-        // FIXED: No more ternary. Finding the row and area using exactly what was passed.
         const row = document.getElementById(uid);
         const area = document.getElementById("up-" + uid);
-        
-        if (!row || !area) {
-            console.error("Critical Mismatch: Could not find row or area for", uid);
-            return;
-        }
-
         const fName = row.querySelector('.fName').value;
         const sName = row.querySelector('.sName').value;
         const stdVal = row.querySelector('.std').value;
@@ -149,8 +167,6 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title: videoTitle }) 
             });
-            
-            if (!res.ok) throw new Error("Worker Connection Failed");
             const creds = await res.json();
             
             new tus.Upload(file, {
@@ -177,7 +193,7 @@
                 }
             }).start();
         } catch (e) { 
-            alert("Upload error. Check connection."); 
+            alert("Upload error."); 
             area.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">`;
         }
     }
@@ -187,18 +203,48 @@
         let allValid = true;
         document.querySelectorAll('.student-block').forEach((row) => {
             const fName = row.querySelector('.fName').value;
+            const mName = row.querySelector('.mName').value;
+            const sName = row.querySelector('.sName').value;
             const gender = row.querySelector('.gender').value;
             const std = row.querySelector('.std').value;
+            const div = row.querySelector('.div').value;
             const vId = videoData[row.id]?.videoId;
             
             if (!fName || !gender || !std || !vId) allValid = false;
-            if (vId) out.push({ firstName: fName, standard: std, videoId: vId });
+            
+            // We save EVERYTHING to the JSON so we can rebuild the UI later
+            out.push({ 
+                uid: row.id,
+                firstName: fName, 
+                middleName: mName,
+                surname: sName,
+                gender: gender,
+                standard: std, 
+                division: div,
+                videoId: vId || null 
+            });
         });
         const finalValue = (allValid && out.length > 0) ? JSON.stringify(out) : "";
         JFCustomWidget.sendData({ value: finalValue });
     }
 
-    JFCustomWidget.subscribe("ready", refreshIndices);
+    // PERSISTENCE: This runs when the widget loads
+    JFCustomWidget.subscribe("ready", (data) => {
+        if (data && data.value) {
+            try {
+                const savedStudents = JSON.parse(data.value);
+                if (Array.isArray(savedStudents) && savedStudents.length > 0) {
+                    // Clear the default row first
+                    document.getElementById('student-list').innerHTML = '';
+                    // Rebuild rows from saved data
+                    savedStudents.forEach(student => addNewStudent(student));
+                }
+            } catch (e) {
+                console.error("Failed to parse saved data", e);
+            }
+        }
+        refreshIndices();
+    });
 </script>
 </body>
 </html>
