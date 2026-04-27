@@ -1,53 +1,53 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="//js.jotform.com/JotFormCustomWidget.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tus-js-client@latest/dist/tus.min.js"></script>
     <style>
-        body { font-family: -apple-system, sans-serif; background: #ffffff; margin: 0; padding: 10px; }
+        body { font-family: -apple-system, sans-serif; background: #ffffff; margin: 0; padding: 10px; overflow-x: hidden; }
         
-        #widget-wrap { display: flex; flex-direction: column; gap: 15px; }
+        #widget-wrap { display: flex; flex-direction: column; gap: 15px; width: 100%; }
 
-        /* The Scrolling Parameter Container */
         #widget-container { 
             width: 100%; 
-            overflow-x: auto; /* Enable horizontal scrolling */
             border: 1px solid #e1e4e8; 
             border-radius: 8px; 
             background: #fff;
-            scroll-behavior: smooth;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        #student-list { 
-            min-width: 650px; /* Parameter: Forces scroll only on very narrow screens */
-            padding: 15px;
         }
 
         .student-block { 
-            padding: 20px 0; 
+            padding: 20px 15px; 
             border-bottom: 2px solid #f6f8fa;
             display: flex;
             flex-direction: column;
             gap: 15px;
         }
 
-        /* Top Line: Names */
+        /* Responsive Grid Logic */
         .name-row { 
             display: grid; 
             grid-template-columns: 1fr 1fr 1fr; 
-            gap: 15px; 
+            gap: 12px; 
         }
 
-        /* Bottom Line: Meta Data + Delete */
         .meta-row { 
             display: grid; 
-            grid-template-columns: 150px 150px 120px 60px; 
-            gap: 15px; 
+            grid-template-columns: 1fr 1fr 100px 50px; 
+            gap: 12px; 
             align-items: end;
         }
 
-        label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 8px; color: #333; }
+        /* Fix #1: Mobile Force Next Line */
+        @media screen and (max-width: 600px) {
+            .name-row, .meta-row { 
+                grid-template-columns: 1fr; /* Stack everything on mobile */
+            }
+            .meta-row { gap: 15px; }
+            .ref-delete-btn { width: 100%; }
+        }
+
+        label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px; color: #333; }
         label span { color: #d73a49; } 
         
         input, select { 
@@ -60,24 +60,20 @@
             border-radius: 6px; cursor: pointer; display: flex; align-items: center; 
             justify-content: center; height: 40px; width: 44px;
         }
-        .ref-delete-btn:hover { background: #9da7b8; }
 
         .upload-area { 
-            margin-top: 5px; padding: 15px; 
-            border: 2px dashed #3498db; border-radius: 6px; background: #f1f7fd; 
+            padding: 15px; border: 2px dashed #3498db; border-radius: 6px; background: #f1f7fd; 
         }
 
         .btn-add { 
             background: #b0bac9; color: white; border: 1px solid #a0abbc;
             padding: 12px 24px; border-radius: 6px; cursor: pointer; 
-            font-weight: bold; font-size: 14px; display: inline-flex; 
-            align-items: center; gap: 8px; width: fit-content;
+            font-weight: bold; font-size: 14px; width: fit-content;
         }
-        
+
         .uploaded-badge { 
             display: inline-flex; align-items: center; background: #e6f4ea; 
-            color: #1e7e34; padding: 6px 14px; border-radius: 20px; 
-            border: 1px solid #c3e6cb; font-weight: bold; font-size: 13px; 
+            color: #1e7e34; padding: 6px 14px; border-radius: 20px; font-weight: bold; 
         }
     </style>
 </head>
@@ -88,7 +84,7 @@
         <div id="student-list">
             <div class="student-block" id="row-0">
                 <div class="name-row">
-                    <div><label>First Name<span>*</span></label><input type="text" class="fName" placeholder="Enter first name" oninput="sync()"></div>
+                    <div><label>First Name<span>*</span></label><input type="text" class="fName" oninput="sync()"></div>
                     <div><label>Middle Name</label><input type="text" class="mName" oninput="sync()"></div>
                     <div><label>Surname</label><input type="text" class="sName" oninput="sync()"></div>
                 </div>
@@ -105,7 +101,7 @@
                         </select>
                     </div>
                     <div><label>Division</label><input type="text" class="div" oninput="sync()"></div>
-                    <div class="del-col"></div>
+                    <div class="del-col"></div> 
                 </div>
 
                 <div class="upload-area" id="upload-sec-0">
@@ -115,7 +111,6 @@
             </div>
         </div>
     </div>
-
     <button type="button" class="btn-add" onclick="addNewStudent()">+ Add Student</button>
 </div>
 
@@ -124,38 +119,64 @@
     const TRASH_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
     let videoData = [{}];
 
+    // Fix #2 & #4: Update Frame Height
+    function updateFrameHeight() {
+        const height = document.body.scrollHeight + 20;
+        JFCustomWidget.requestFrameResize({ width: '100%', height: height });
+    }
+
+    // Fix #3: Show/Hide Delete Buttons
+    function updateDeleteButtons() {
+        const rows = document.querySelectorAll('.student-block');
+        rows.forEach((row, index) => {
+            const delCol = row.querySelector('.del-col');
+            if (rows.length > 1) {
+                delCol.innerHTML = `<button type="button" class="ref-delete-btn" onclick="removeRow('${row.id}')">${TRASH_ICON}</button>`;
+            } else {
+                delCol.innerHTML = ''; // Hide if only one remains
+            }
+        });
+    }
+
     function addNewStudent() {
         const list = document.getElementById('student-list');
-        const index = list.children.length;
+        const index = Date.now(); // Unique ID
         const newRow = list.children[0].cloneNode(true);
         newRow.id = `row-${index}`;
         newRow.querySelectorAll('input').forEach(i => i.value = '');
         newRow.querySelectorAll('select').forEach(s => s.selectedIndex = 0);
-        newRow.querySelector('.del-col').innerHTML = `<button type="button" class="ref-delete-btn" onclick="removeRow(${index})">${TRASH_ICON}</button>`;
+        
         const uploadArea = newRow.querySelector('.upload-area');
         uploadArea.id = `upload-sec-${index}`;
-        uploadArea.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload(${index}, this.files[0])">`;
+        uploadArea.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload('${index}', this.files[0])">`;
+        
         list.appendChild(newRow);
-        videoData.push({});
+        videoData[`${index}`] = {};
+        updateDeleteButtons();
+        updateFrameHeight();
         sync();
     }
 
-    function removeRow(i) {
-        document.getElementById(`row-${i}`).remove();
+    function removeRow(rowId) {
+        document.getElementById(rowId).remove();
+        updateDeleteButtons();
+        updateFrameHeight();
         sync();
     }
 
     async function handleUpload(index, file) {
-        const row = document.getElementById(`row-${index}`);
+        const row = document.getElementById(index === 0 ? 'row-0' : `row-${index}`);
         const fName = row.querySelector('.fName').value;
         const stdVal = row.querySelector('.std').value;
         if (!file || !fName || !stdVal) { alert("Enter Name and Standard first."); return; }
+        
         const area = document.getElementById(`upload-sec-${index}`);
         area.innerHTML = `Uploading: ${file.name}... <strong id="p-${index}">0%</strong>`;
+
         try {
             const res = await fetch(`${WORKER_URL}/sign`, {
                 method: 'POST',
-                body: JSON.stringify({ title: `${fName}_Standard${stdVal}_Passage` })
+                body: JSON.stringify({ title: `${fName}_Std${stdVal}_Passage` })
             });
             const creds = await res.json();
             const upload = new tus.Upload(file, {
@@ -174,18 +195,24 @@
 
     function sync() {
         const results = [];
-        document.querySelectorAll('.student-block').forEach((row, i) => {
-            if (videoData[i]?.videoId) {
+        document.querySelectorAll('.student-block').forEach((row) => {
+            const rowId = row.id.replace('row-', '');
+            const vId = videoData[rowId === '0' ? 0 : rowId]?.videoId;
+            if (vId) {
                 results.push({
                     firstName: row.querySelector('.fName').value,
                     standard: row.querySelector('.std').value,
-                    videoId: videoData[i].videoId
+                    videoId: vId
                 });
             }
         });
         JFCustomWidget.sendData({ value: JSON.stringify(results) });
     }
-    JFCustomWidget.subscribe("ready", sync);
+
+    JFCustomWidget.subscribe("ready", () => {
+        updateDeleteButtons();
+        updateFrameHeight();
+    });
 </script>
 </body>
 </html>
