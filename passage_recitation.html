@@ -6,82 +6,18 @@
     <script src="https://cdn.jsdelivr.net/npm/tus-js-client@latest/dist/tus.min.js"></script>
     <style>
         html, body { margin: 0; padding: 0; background: transparent; overflow-x: hidden; }
-        
-        /* 1. Body Padding: Ensures badge and buttons have clear space */
-        body { 
-            font-family: -apple-system, sans-serif; 
-            padding: 25px 5px 15px 5px; 
-        }
-        
-        #widget-wrap { 
-            display: flex; 
-            flex-direction: column; 
-            gap: 20px; 
-            width: 100%; 
-            box-sizing: border-box;
-        }
-
-        #student-list { 
-            display: flex; 
-            flex-direction: column; 
-            gap: 30px; 
-            width: 100%;
-        }
-
-        /* 2. Student Block: Clear marker with shadow and spacing */
-        .student-block { 
-            position: relative;
-            padding: 25px 12px 20px 12px; 
-            border: 1px solid #e1e4e8;
-            border-radius: 12px;
-            background: #ffffff;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-            display: flex;
-            flex-direction: column; 
-            gap: 18px;
-            box-sizing: border-box;
-        }
-
-        /* 3. Smart Counter Badge: Correctly positioned at top-left */
-        .student-count-badge {
-            position: absolute;
-            top: -14px;
-            left: 15px;
-            background: #4a5568;
-            color: white;
-            padding: 4px 14px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: bold;
-            z-index: 10;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        /* 4. Layout Grids: Handling wide fields */
+        body { font-family: -apple-system, sans-serif; padding: 25px 5px 15px 5px; }
+        #widget-wrap { display: flex; flex-direction: column; gap: 20px; width: 100%; box-sizing: border-box; }
+        #student-list { display: flex; flex-direction: column; gap: 30px; width: 100%; }
+        .student-block { position: relative; padding: 25px 12px 20px 12px; border: 1px solid #e1e4e8; border-radius: 12px; background: #ffffff; box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: flex; flex-direction: column; gap: 18px; box-sizing: border-box; }
+        .student-count-badge { position: absolute; top: -14px; left: 15px; background: #4a5568; color: white; padding: 4px 14px; border-radius: 20px; font-size: 11px; font-weight: bold; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .name-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
         .meta-row { display: grid; grid-template-columns: 1fr 1fr 100px auto; gap: 12px; align-items: end; }
-
-        /* 5. Mobile Responsiveness: Forced stacking */
-        @media screen and (max-width: 650px) {
-            .name-row, .meta-row { grid-template-columns: 1fr; }
-            .ref-delete-btn { width: 100%; justify-content: center; }
-        }
-
+        @media screen and (max-width: 650px) { .name-row, .meta-row { grid-template-columns: 1fr; } .ref-delete-btn { width: 100%; justify-content: center; } }
         label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px; color: #333; text-transform: uppercase; }
         label span { color: #d73a49; } 
-        
-        input, select { 
-            width: 100%; padding: 10px; border: 1px solid #ccd0d5; border-radius: 6px; 
-            font-size: 14px; background: #fafbfc; height: 40px; box-sizing: border-box;
-        }
-
-        /* 6. Delete Button: Updated text and styling */
-        .ref-delete-btn { 
-            background: #f7fafc; color: #e53e3e; border: 1px solid #feb2b2; 
-            border-radius: 6px; cursor: pointer; display: flex; align-items: center; 
-            gap: 6px; height: 40px; padding: 0 12px; font-size: 13px; font-weight: 600;
-        }
-
+        input, select { width: 100%; padding: 10px; border: 1px solid #ccd0d5; border-radius: 6px; font-size: 14px; background: #fafbfc; height: 40px; box-sizing: border-box; }
+        .ref-delete-btn { background: #f7fafc; color: #e53e3e; border: 1px solid #feb2b2; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 12px; font-size: 13px; font-weight: 600; }
         .upload-area { padding: 15px; border: 2px dashed #3498db; border-radius: 8px; background: #f1f7fd; }
         .btn-add { background: #4a5568; color: white; border: none; padding: 14px 28px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px; width: fit-content; margin-bottom: 10px; }
         .btn-add:hover { background: #2d3748; }
@@ -128,7 +64,6 @@
     
     let videoData = {}; 
 
-    // AUTO-HEIGHT Logic: Watches for any changes and tells Jotform to resize
     const resizeObserver = new ResizeObserver(() => {
         const height = document.body.offsetHeight + 40; 
         JFCustomWidget.requestFrameResize({ width: '100%', height: height });
@@ -166,63 +101,46 @@
     }
 
     async function removeRow(uid) {
-        // 1. Get the Video ID we stored when they uploaded
         const vId = videoData[uid]?.videoId;
-
-        // 2. If a video exists, tell the worker to delete it from Bunny.net
         if (vId) {
-            // We don't even need to wait for this (no 'await'), 
-            // just fire the request so the user doesn't feel a delay.
             fetch(`${WORKER_URL}/delete`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ videoId: vId })
-            })
+            }).catch(e => console.log("Cleanup failed:", e));
         }
-
-        // 3. Remove the student entry from the screen
-        document.getElementById(uid).remove();
-        
-        // 4. Clean up the internal data
+        const el = document.getElementById(uid);
+        if (el) el.remove();
         delete videoData[uid];
-        
-        // 5. Tell Jotform the entry is gone
         refreshIndices();
         sync();
     }
 
     async function handleUpload(uid, file) {
-        const row = document.getElementById(uid === 'initial' ? 'row-initial' : uid);
+        // FIXED: No more ternary. Finding the row and area using exactly what was passed.
+        const row = document.getElementById(uid);
+        const area = document.getElementById("up-" + uid);
         
-        // 1. Grab data only from the current student block
+        if (!row || !area) {
+            console.error("Critical Mismatch: Could not find row or area for", uid);
+            return;
+        }
+
         const fName = row.querySelector('.fName').value;
         const sName = row.querySelector('.sName').value;
         const stdVal = row.querySelector('.std').value;
         
-        // 2. Validation: Ensure they filled the name/std before uploading
         if (!file || !fName || !stdVal) { 
             alert("Please enter First Name and Standard before uploading."); 
             return; 
         }
 
-        // 3. Cleaning Logic: Lowercase and underscores only
         const clean = (str) => {
             if (!str) return "";
-            return str.toString()
-                .toLowerCase()
-                .trim()
-                .replace(/[^a-z0-9]/gi, '_') // Replace special chars/spaces with _
-                .replace(/_+/g, '_');        // Collapse multiple ___ into one _
+            return str.toString().toLowerCase().trim().replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_');
         };
 
-        const safeFName = clean(fName);
-        const safeSName = clean(sName) || "no_surname";
-        const passageRecitation = "passage_recitation";
-
-        // 4. Construct Title: passage_recitation_firstname_surname_std10
-        const videoTitle = `${passageRecitation}_${safeFName}_${safeSName}_std_${stdVal}`;
-
-        const area = document.getElementById("up-" + uid);
+        const videoTitle = `passage_recitation_${clean(fName)}_${clean(sName) || "no_surname"}_std_${stdVal}`;
         area.innerHTML = `Uploading... <span id="p-${uid}">0%</span>`;
 
         try {
@@ -233,7 +151,6 @@
             });
             
             if (!res.ok) throw new Error("Worker Connection Failed");
-            
             const creds = await res.json();
             
             new tus.Upload(file, {
@@ -256,37 +173,32 @@
                 },
                 onError: (err) => {
                     alert("Upload failed: " + err);
-                    // Reset to allow retry
                     area.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">`;
                 }
             }).start();
         } catch (e) { 
-            alert("Upload error: Please check your internet or Cloudflare Worker URL."); 
-            console.error(e);
+            alert("Upload error. Check connection."); 
             area.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">`;
         }
     }
 
-    // VALIDATION Logic: Sends empty value if any mandatory field/video is missing
     function sync() {
         const out = [];
         let allValid = true;
         document.querySelectorAll('.student-block').forEach((row) => {
-            const rowId = row.id;
             const fName = row.querySelector('.fName').value;
             const gender = row.querySelector('.gender').value;
             const std = row.querySelector('.std').value;
-            const vId = videoData[rowId]?.videoId;
+            const vId = videoData[row.id]?.videoId;
+            
             if (!fName || !gender || !std || !vId) allValid = false;
             if (vId) out.push({ firstName: fName, standard: std, videoId: vId });
         });
-        const finalValue = allValid && out.length > 0 ? JSON.stringify(out) : "";
+        const finalValue = (allValid && out.length > 0) ? JSON.stringify(out) : "";
         JFCustomWidget.sendData({ value: finalValue });
     }
 
-    JFCustomWidget.subscribe("ready", () => {
-        refreshIndices();
-    });
+    JFCustomWidget.subscribe("ready", refreshIndices);
 </script>
 </body>
 </html>
