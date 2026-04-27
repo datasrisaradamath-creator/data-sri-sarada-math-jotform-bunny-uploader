@@ -1,61 +1,34 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="//js.jotform.com/JotFormCustomWidget.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tus-js-client@latest/dist/tus.min.js"></script>
-    <style>
-        html, body { margin: 0; padding: 0; background: transparent; overflow-x: hidden; }
-        body { font-family: -apple-system, sans-serif; padding: 25px 5px 15px 5px; }
-        #widget-wrap { display: flex; flex-direction: column; gap: 20px; width: 100%; box-sizing: border-box; }
-        #student-list { display: flex; flex-direction: column; gap: 30px; width: 100%; }
-        .student-block { position: relative; padding: 25px 12px 20px 12px; border: 1px solid #e1e4e8; border-radius: 12px; background: #ffffff; box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: flex; flex-direction: column; gap: 18px; box-sizing: border-box; }
-        .student-count-badge { position: absolute; top: -14px; left: 15px; background: #4a5568; color: white; padding: 4px 14px; border-radius: 20px; font-size: 11px; font-weight: bold; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .name-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
-        .meta-row { display: grid; grid-template-columns: 1fr 1fr 100px auto; gap: 12px; align-items: end; }
-        @media screen and (max-width: 650px) { .name-row, .meta-row { grid-template-columns: 1fr; } .ref-delete-btn { width: 100%; justify-content: center; } }
-        label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px; color: #333; text-transform: uppercase; }
-        label span { color: #d73a49; } 
-        input, select { width: 100%; padding: 10px; border: 1px solid #ccd0d5; border-radius: 6px; font-size: 14px; background: #fafbfc; height: 40px; box-sizing: border-box; }
-        .ref-delete-btn { background: #f7fafc; color: #e53e3e; border: 1px solid #feb2b2; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 12px; font-size: 13px; font-weight: 600; }
-        .upload-area { padding: 15px; border: 2px dashed #3498db; border-radius: 8px; background: #f1f7fd; }
-        .btn-add { background: #4a5568; color: white; border: none; padding: 14px 28px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px; width: fit-content; margin-bottom: 10px; }
-        .btn-add:hover { background: #2d3748; }
-        .uploaded-badge { display: inline-flex; align-items: center; background: #e6f4ea; color: #1e7e34; padding: 8px 16px; border-radius: 6px; font-weight: bold; }
-    </style>
-</head>
-<body>
-
 <div id="widget-wrap">
     <div id="student-list">
-        <div class="student-block" id="row-initial">
-            <div class="student-count-badge">Student 1</div>
-            <div class="name-row">
-                <div><label>First Name<span>*</span></label><input type="text" class="fName" oninput="sync()"></div>
-                <div><label>Middle Name</label><input type="text" class="mName" oninput="sync()"></div>
-                <div><label>Surname</label><input type="text" class="sName" oninput="sync()"></div>
-            </div>
-            <div class="meta-row">
-                <div><label>Gender<span>*</span></label>
-                    <select class="gender" onchange="sync()">
-                        <option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option>
-                    </select>
-                </div>
-                <div><label>Standard<span>*</span></label>
-                    <select class="std" onchange="sync()">
-                        <option value="">Select</option><option value="8">8</option><option value="9">9</option><option value="10">10</option>
-                    </select>
-                </div>
-                <div><label>Division</label><input type="text" class="div" oninput="sync()"></div>
-                <div class="del-col"></div>
-            </div>
-            <div class="upload-area" id="up-row-initial">
-                <label>Upload Video<span>*</span></label>
-                <input type="file" accept="video/*" onchange="handleUpload('row-initial', this.files[0])">
-            </div>
         </div>
-    </div>
     <button type="button" class="btn-add" onclick="addNewStudent()">+ Add Student</button>
+</div>
+
+<div style="display:none;">
+    <div class="student-block" id="MASTER_TEMPLATE">
+        <div class="student-count-badge">Student</div>
+        <div class="name-row">
+            <div><label>First Name<span>*</span></label><input type="text" class="fName" oninput="sync()"></div>
+            <div><label>Middle Name</label><input type="text" class="mName" oninput="sync()"></div>
+            <div><label>Surname</label><input type="text" class="sName" oninput="sync()"></div>
+        </div>
+        <div class="meta-row">
+            <div><label>Gender<span>*</span></label>
+                <select class="gender" onchange="sync()">
+                    <option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option>
+                </select>
+            </div>
+            <div><label>Standard<span>*</span></label>
+                <select class="std" onchange="sync()">
+                    <option value="">Select</option><option value="8">8</option><option value="9">9</option><option value="10">10</option>
+                </select>
+            </div>
+            <div><label>Division</label><input type="text" class="div" oninput="sync()"></div>
+            <div class="del-col"></div>
+        </div>
+        <div class="upload-area">
+            </div>
+    </div>
 </div>
 
 <script>
@@ -63,9 +36,6 @@
     const TRASH_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
     
     let videoData = {}; 
-    // We store the 'initial' HTML as a string so we can always clone it, 
-    // even if the first student is deleted.
-    const rowTemplate = document.getElementById('row-initial').cloneNode(true);
 
     const resizeObserver = new ResizeObserver(() => {
         const height = document.body.offsetHeight + 40; 
@@ -74,28 +44,26 @@
     resizeObserver.observe(document.body);
 
     function refreshIndices() {
-        const rows = document.querySelectorAll('.student-block');
+        const rows = document.querySelectorAll('#student-list .student-block');
         rows.forEach((row, index) => {
             row.querySelector('.student-count-badge').innerText = `Student ${index + 1}`;
             const delCol = row.querySelector('.del-col');
-            // Only show delete if there's more than one row OR if it's not the last remaining row
-            if (rows.length > 1) {
-                delCol.innerHTML = `<button type="button" class="ref-delete-btn" onclick="removeRow('${row.id}')">${TRASH_ICON} Delete Student</button>`;
-            } else {
-                delCol.innerHTML = '';
-            }
+            // Allow deletion if more than 1 row exists
+            delCol.innerHTML = (rows.length > 1) 
+                ? `<button type="button" class="ref-delete-btn" onclick="removeRow('${row.id}')">${TRASH_ICON} Delete Student</button>`
+                : '';
         });
     }
 
-    // UPDATED: Now accepts optional 'data' to persist values
     function addNewStudent(savedData = null) {
         const list = document.getElementById('student-list');
-        const uid = savedData ? (savedData.uid || "u" + Date.now()) : "u" + Date.now();
+        const uid = savedData?.uid || "u" + Date.now() + Math.floor(Math.random() * 1000);
         
-        // Always clone from our "safe" template, not the live DOM
-        const block = rowTemplate.cloneNode(true);
+        // Clone from the HIDDEN master template
+        const block = document.getElementById('MASTER_TEMPLATE').cloneNode(true);
         block.id = uid;
         
+        // Fill data if persisting
         if (savedData) {
             block.querySelector('.fName').value = savedData.firstName || "";
             block.querySelector('.mName').value = savedData.middleName || "";
@@ -103,26 +71,21 @@
             block.querySelector('.gender').value = savedData.gender || "";
             block.querySelector('.std').value = savedData.standard || "";
             block.querySelector('.div').value = savedData.division || "";
-            
-            if (savedData.videoId) {
-                videoData[uid] = { videoId: savedData.videoId };
-                const area = block.querySelector('.upload-area');
-                area.id = `up-${uid}`;
-                area.innerHTML = `<div class="uploaded-badge">✓ Video Uploaded</div>`;
-            }
-        } else {
-            block.querySelectorAll('input').forEach(i => i.value = '');
-            block.querySelectorAll('select').forEach(s => s.selectedIndex = 0);
+            if (savedData.videoId) videoData[uid] = { videoId: savedData.videoId };
         }
-        
-        const uploadArea = block.querySelector('.upload-area');
-        if (!savedData?.videoId) {
-            uploadArea.id = `up-${uid}`;
-            uploadArea.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">`;
+
+        // Setup Upload Area
+        const area = block.querySelector('.upload-area');
+        area.id = "up-" + uid;
+        if (videoData[uid]?.videoId) {
+            area.innerHTML = `<div class="uploaded-badge">✓ Video Uploaded</div>`;
+        } else {
+            area.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">`;
         }
         
         list.appendChild(block);
         refreshIndices();
+        if (!savedData) sync(); // Only sync automatically for new blank rows
     }
 
     async function removeRow(uid) {
@@ -132,7 +95,7 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ videoId: vId })
-            }).catch(e => console.log("Cleanup failed:", e));
+            }).catch(() => {});
         }
         const el = document.getElementById(uid);
         if (el) el.remove();
@@ -150,15 +113,13 @@
         
         if (!file || !fName || !stdVal) { 
             alert("Please enter First Name and Standard before uploading."); 
+            area.querySelector('input').value = ""; // Reset file input
             return; 
         }
 
-        const clean = (str) => {
-            if (!str) return "";
-            return str.toString().toLowerCase().trim().replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_');
-        };
-
+        const clean = (s) => s ? s.toString().toLowerCase().trim().replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_') : "";
         const videoTitle = `passage_recitation_${clean(fName)}_${clean(sName) || "no_surname"}_std_${stdVal}`;
+        
         area.innerHTML = `Uploading... <span id="p-${uid}">0%</span>`;
 
         try {
@@ -179,8 +140,8 @@
                 },
                 onProgress: (s, t) => { 
                     const pct = Math.round((s/t)*100);
-                    const progressSpan = document.getElementById(`p-${uid}`);
-                    if (progressSpan) progressSpan.innerText = pct + "%"; 
+                    const p = document.getElementById(`p-${uid}`);
+                    if (p) p.innerText = pct + "%"; 
                 },
                 onSuccess: () => {
                     area.innerHTML = `<div class="uploaded-badge">✓ Video Uploaded</div>`;
@@ -193,7 +154,7 @@
                 }
             }).start();
         } catch (e) { 
-            alert("Upload error."); 
+            alert("Connection error."); 
             area.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">`;
         }
     }
@@ -201,50 +162,48 @@
     function sync() {
         const out = [];
         let allValid = true;
-        document.querySelectorAll('.student-block').forEach((row) => {
+        document.querySelectorAll('#student-list .student-block').forEach((row) => {
             const fName = row.querySelector('.fName').value;
-            const mName = row.querySelector('.mName').value;
-            const sName = row.querySelector('.sName').value;
             const gender = row.querySelector('.gender').value;
             const std = row.querySelector('.std').value;
-            const div = row.querySelector('.div').value;
             const vId = videoData[row.id]?.videoId;
             
             if (!fName || !gender || !std || !vId) allValid = false;
             
-            // We save EVERYTHING to the JSON so we can rebuild the UI later
             out.push({ 
                 uid: row.id,
                 firstName: fName, 
-                middleName: mName,
-                surname: sName,
+                middleName: row.querySelector('.mName').value,
+                surname: row.querySelector('.sName').value,
                 gender: gender,
                 standard: std, 
-                division: div,
+                division: row.querySelector('.div').value,
                 videoId: vId || null 
             });
         });
-        const finalValue = (allValid && out.length > 0) ? JSON.stringify(out) : "";
-        JFCustomWidget.sendData({ value: finalValue });
+        const val = (allValid && out.length > 0) ? JSON.stringify(out) : "";
+        JFCustomWidget.sendData({ value: val });
     }
 
-    // PERSISTENCE: This runs when the widget loads
+    // MAIN INITIALIZATION
     JFCustomWidget.subscribe("ready", (data) => {
+        const list = document.getElementById('student-list');
+        list.innerHTML = ''; // Start clean
+
         if (data && data.value) {
             try {
-                const savedStudents = JSON.parse(data.value);
-                if (Array.isArray(savedStudents) && savedStudents.length > 0) {
-                    // Clear the default row first
-                    document.getElementById('student-list').innerHTML = '';
-                    // Rebuild rows from saved data
-                    savedStudents.forEach(student => addNewStudent(student));
+                const saved = JSON.parse(data.value);
+                if (Array.isArray(saved) && saved.length > 0) {
+                    saved.forEach(s => addNewStudent(s));
+                } else {
+                    addNewStudent(); // Default row
                 }
             } catch (e) {
-                console.error("Failed to parse saved data", e);
+                addNewStudent(); // Default row on error
             }
+        } else {
+            addNewStudent(); // Default row if no data
         }
         refreshIndices();
     });
 </script>
-</body>
-</html>
