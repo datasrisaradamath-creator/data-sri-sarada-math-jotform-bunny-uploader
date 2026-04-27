@@ -7,10 +7,10 @@
     <style>
         html, body { margin: 0; padding: 0; background: transparent; overflow-x: hidden; }
         
-        /* Fixed Padding: Reduced right padding to 5px for more space */
+        /* Fixed Padding: Optimized for space */
         body { 
             font-family: -apple-system, sans-serif; 
-            padding: 25px 5px 10px 5px; 
+            padding: 25px 2px 10px 5px; 
         }
         
         #widget-wrap { 
@@ -30,7 +30,7 @@
 
         .student-block { 
             position: relative;
-            padding: 25px 15px; /* Slightly tighter internal padding */
+            padding: 25px 12px 20px 12px; 
             border: 1px solid #e1e4e8;
             border-radius: 12px;
             background: #ffffff;
@@ -81,6 +81,7 @@
             font-size: 14px; background: #fafbfc; height: 40px; box-sizing: border-box;
         }
 
+        /* Update 1: Delete Student text added */
         .ref-delete-btn { 
             background: #f7fafc; color: #e53e3e; border: 1px solid #feb2b2; 
             border-radius: 6px; cursor: pointer; display: flex; align-items: center; 
@@ -92,8 +93,9 @@
         .btn-add { 
             background: #4a5568; color: white; border: none; 
             padding: 14px 28px; border-radius: 8px; cursor: pointer; 
-            font-weight: bold; width: fit-content; margin-top: 10px;
+            font-weight: bold; font-size: 14px; width: fit-content;
         }
+        .btn-add:hover { background: #2d3748; }
 
         .uploaded-badge { 
             display: inline-flex; align-items: center; background: #e6f4ea; 
@@ -108,7 +110,7 @@
         <div class="student-block" id="row-initial">
             <div class="student-count-badge">Student 1</div>
             <div class="name-row">
-                <div><label>First Name<span>*</span></label><input type="text" class="fName" placeholder="Enter first name" oninput="sync()"></div>
+                <div><label>First Name<span>*</span></label><input type="text" class="fName" oninput="sync()"></div>
                 <div><label>Middle Name</label><input type="text" class="mName" oninput="sync()"></div>
                 <div><label>Surname</label><input type="text" class="sName" oninput="sync()"></div>
             </div>
@@ -141,9 +143,11 @@
     
     let videoData = {}; 
 
+    // Update 2: Refined Auto-Increase Height logic
     function updateFrameHeight() {
         setTimeout(() => {
-            JFCustomWidget.requestFrameResize({ width: '100%', height: document.body.scrollHeight + 40 });
+            const height = document.body.scrollHeight + 35; // Extra buffer for the Add Button
+            JFCustomWidget.requestFrameResize({ width: '100%', height: height });
         }, 150);
     }
 
@@ -153,7 +157,8 @@
             row.querySelector('.student-count-badge').innerText = `Student ${index + 1}`;
             const delCol = row.querySelector('.del-col');
             if (rows.length > 1) {
-                delCol.innerHTML = `<button type="button" class="ref-delete-btn" onclick="removeRow('${row.id}')">${TRASH_ICON} Delete</button>`;
+                // Change 1: "Delete Student" label
+                delCol.innerHTML = `<button type="button" class="ref-delete-btn" onclick="removeRow('${row.id}')">${TRASH_ICON} Delete Student</button>`;
             } else {
                 delCol.innerHTML = '';
             }
@@ -164,7 +169,6 @@
     function addNewStudent() {
         const list = document.getElementById('student-list');
         const uid = "u" + Date.now();
-        // Clone the initial row
         const block = document.getElementById('row-initial').cloneNode(true);
         block.id = uid;
         block.querySelectorAll('input').forEach(i => i.value = '');
@@ -222,7 +226,6 @@
             const std = row.querySelector('.std').value;
             const vId = videoData[rowId]?.videoId;
 
-            // Mark as invalid if required data is missing
             if (!fName || !gender || !std || !vId) {
                 allValid = false;
             }
@@ -232,13 +235,12 @@
             }
         });
 
-        // Send value only if ALL students are complete
         const finalValue = allValid && out.length > 0 ? JSON.stringify(out) : "";
         JFCustomWidget.sendData({ value: finalValue });
     }
 
     JFCustomWidget.subscribe("ready", () => {
-        refreshIndices();
+        refreshIndices(); // Forces initial height calculation to cover the Add button
     });
 </script>
 </body>
