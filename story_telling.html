@@ -190,25 +190,59 @@
         const row = document.getElementById(uid === 'initial' ? 'row-initial' : uid);
         const fName = row.querySelector('.fName').value;
         const stdVal = row.querySelector('.std').value;
-        if (!file || !fName || !stdVal) { alert("Enter Name and Standard first."); return; }
         
-        const area = document.getElementById(uid === 'initial' ? 'up-initial' : `up-${uid}`);
-        area.innerHTML = `Uploading... <span id="p-${uid}">0%</span>`;
+        if (!file || !fName || !stdVal) { 
+            alert("Enter Student Name and Standard first."); 
+            return; 
+        }
 
-        try {
-            const res = await fetch(`${WORKER_URL}/sign`, { method: 'POST', body: JSON.stringify({ title: `${fName}_Std${stdVal}` }) });
-            const creds = await res.json();
-            new tus.Upload(file, {
-                endpoint: "https://video.bunnycdn.com/tusupload",
-                headers: { AuthorizationSignature: creds.signature, AuthorizationExpire: creds.expirationTime, VideoId: creds.videoId, LibraryId: creds.libraryId },
-                onProgress: (s, t) => { document.getElementById(`p-${uid}`).innerText = Math.round((s/t)*100) + "%"; },
-                onSuccess: () => {
-                    area.innerHTML = `<div class="uploaded-badge">✓ Video Uploaded</div>`;
-                    videoData[uid] = { videoId: creds.videoId };
-                    sync();
-                }
-            }).start();
-        } catch (e) { alert("Upload error."); }
+        // Reach out to Jotform to get the School Name
+        JFCustomWidget.getFieldsValueByTitles(['School Name'], async function(fields) {
+            const school = fields['School Name'] || "unknown_school";
+            const passageRecitation = "passage_recitation"; // Hardcoded file name part
+            
+            // Helper to clean and lowercase strings
+            const clean = (str) => str.toLowerCase().replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_');
+
+            const safeSchool = clean(school);
+            const safeFName = clean(fName);
+
+            const area = document.getElementById(uid === 'initial' ? 'up-initial' : `up-${uid}`);
+            area.innerHTML = `Uploading... <span id="p-${uid}">0%</span>`;
+
+            try {
+                // Final Name Format: school_passage_recitation_studentname_std8
+                const videoTitle = `${safeSchool}_${passageRecitation}_${safeFName}_std${stdVal}`;
+                
+                const res = await fetch(`${WORKER_URL}/sign`, { 
+                    method: 'POST', 
+                    body: JSON.stringify({ title: videoTitle }) 
+                });
+                
+                const creds = await res.json();
+                
+                new tus.Upload(file, {
+                    endpoint: "https://video.bunnycdn.com/tusupload",
+                    headers: { 
+                        AuthorizationSignature: creds.signature, 
+                        AuthorizationExpire: creds.expirationTime, 
+                        VideoId: creds.videoId, 
+                        LibraryId: creds.libraryId 
+                    },
+                    onProgress: (s, t) => { 
+                        document.getElementById(`p-${uid}`).innerText = Math.round((s/t)*100) + "%"; 
+                    },
+                    onSuccess: () => {
+                        area.innerHTML = `<div class="uploaded-badge">✓ Video Uploaded</div>`;
+                        videoData[uid] = { videoId: creds.videoId };
+                        sync();
+                    }
+                }).start();
+            } catch (e) { 
+                alert("Upload error."); 
+                console.error(e);
+            }
+        });
     }
 
     // VALIDATION Logic: Sends empty value if any mandatory field/video is missing
