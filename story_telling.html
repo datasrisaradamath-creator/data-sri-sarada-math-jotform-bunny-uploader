@@ -188,79 +188,78 @@
 
     async function handleUpload(uid, file) {
         const row = document.getElementById(uid === 'initial' ? 'row-initial' : uid);
+        
+        // 1. Grab data only from the current student block
         const fName = row.querySelector('.fName').value;
+        const sName = row.querySelector('.sName').value;
         const stdVal = row.querySelector('.std').value;
         
+        // 2. Validation: Ensure they filled the name/std before uploading
         if (!file || !fName || !stdVal) { 
-            alert("Enter Student Name and Standard first."); 
+            alert("Please enter First Name and Standard before uploading."); 
             return; 
         }
 
+        // 3. Cleaning Logic: Lowercase and underscores only
+        const clean = (str) => {
+            if (!str) return "";
+            return str.toString()
+                .toLowerCase()
+                .trim()
+                .replace(/[^a-z0-9]/gi, '_') // Replace special chars/spaces with _
+                .replace(/_+/g, '_');        // Collapse multiple ___ into one _
+        };
+
+        const safeFName = clean(fName);
+        const safeSName = clean(sName) || "no_surname";
+        const story_telling = "story_telling";
+
+        // 4. Construct Title: passage_recitation_firstname_surname_std10
+        const videoTitle = `${story_telling}_${safeFName}_${safeSName}_std_${stdVal}`;
+
         const area = document.getElementById(uid === 'initial' ? 'up-initial' : `up-${uid}`);
-        area.innerHTML = `Initializing...`;
+        area.innerHTML = `Uploading... <span id="p-${uid}">0%</span>`;
 
-        // 1. USE THE FIELD ID DIRECTLY (#input_16)
-        // We remove the '#' and just use 'input_16'
-        JFCustomWidget.getFieldsValueById(['input_16'], async function(fields) {
+        try {
+            const res = await fetch(`${WORKER_URL}/sign`, { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: videoTitle }) 
+            });
             
-            // 2. Grab the value or use fallback
-            let schoolRaw = fields['input_16'] || "unknown_school";
+            if (!res.ok) throw new Error("Worker Connection Failed");
             
-            // Helper to clean: lowercase, underscores, no special chars
-            const clean = (str) => {
-                if (!str) return "";
-                return str.toString().toLowerCase().trim().replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_');
-            };
-
-            const safeSchool = clean(schoolRaw);
-            const safeFName = clean(fName);
-            const passageRecitation = "passage_recitation";
-
-            // school_passage_recitation_studentname_std8
-            const videoTitle = `${safeSchool}_${passageRecitation}_${safeFName}_std${stdVal}`;
-
-            area.innerHTML = `Uploading... <span id="p-${uid}">0%</span>`;
-
-            try {
-                const res = await fetch(`${WORKER_URL}/sign`, { 
-                    method: 'POST', 
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title: videoTitle }) 
-                });
-                
-                if (!res.ok) throw new Error("Worker rejected the request");
-                
-                const creds = await res.json();
-                
-                new tus.Upload(file, {
-                    endpoint: "https://video.bunnycdn.com/tusupload",
-                    headers: { 
-                        AuthorizationSignature: creds.signature, 
-                        AuthorizationExpire: creds.expirationTime, 
-                        VideoId: creds.videoId, 
-                        LibraryId: creds.libraryId 
-                    },
-                    onProgress: (s, t) => { 
-                        const pct = Math.round((s/t)*100);
-                        const pSpan = document.getElementById(`p-${uid}`);
-                        if (pSpan) pSpan.innerText = pct + "%"; 
-                    },
-                    onSuccess: () => {
-                        area.innerHTML = `<div class="uploaded-badge">✓ Video Uploaded</div>`;
-                        videoData[uid] = { videoId: creds.videoId };
-                        sync();
-                    },
-                    onError: (err) => {
-                        alert("Upload failed: " + err);
-                        // Reset upload button
-                        area.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">`;
-                    }
-                }).start();
-            } catch (e) { 
-                alert("Connection error: Make sure your Worker URL is correct."); 
-                area.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">`;
-            }
-        });
+            const creds = await res.json();
+            
+            new tus.Upload(file, {
+                endpoint: "https://video.bunnycdn.com/tusupload",
+                headers: { 
+                    AuthorizationSignature: creds.signature, 
+                    AuthorizationExpire: creds.expirationTime, 
+                    VideoId: creds.videoId, 
+                    LibraryId: creds.libraryId 
+                },
+                onProgress: (s, t) => { 
+                    const pct = Math.round((s/t)*100);
+                    const progressSpan = document.getElementById(`p-${uid}`);
+                    if (progressSpan) progressSpan.innerText = pct + "%"; 
+                },
+                onSuccess: () => {
+                    area.innerHTML = `<div class="uploaded-badge">✓ Video Uploaded</div>`;
+                    videoData[uid] = { videoId: creds.videoId };
+                    sync();
+                },
+                onError: (err) => {
+                    alert("Upload failed: " + err);
+                    // Reset to allow retry
+                    area.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">`;
+                }
+            }).start();
+        } catch (e) { 
+            alert("Upload error: Please check your internet or Cloudflare Worker URL."); 
+            console.error(e);
+            area.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">`;
+        }
     }
 
     // VALIDATION Logic: Sends empty value if any mandatory field/video is missing
