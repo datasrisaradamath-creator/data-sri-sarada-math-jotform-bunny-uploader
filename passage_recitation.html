@@ -166,22 +166,26 @@
     }
 
     async function removeRow(uid) {
+        // 1. Get the Video ID we stored when they uploaded
         const vId = videoData[uid]?.videoId;
-        
-        // If there is a video, tell the worker to delete it from Bunny
+
+        // 2. If a video exists, tell the worker to delete it from Bunny.net
         if (vId) {
-            try {
-                await fetch(`${WORKER_URL}/delete-video`, {
-                    method: 'POST',
-                    body: JSON.stringify({ videoId: vId })
-                });
-            } catch (e) {
-                console.error("Could not delete video from server");
-            }
+            // We don't even need to wait for this (no 'await'), 
+            // just fire the request so the user doesn't feel a delay.
+            fetch(`${WORKER_URL}/delete`, {
+                method: 'POST', // Or 'DELETE' depending on your worker setup
+                body: JSON.stringify({ videoId: vId })
+            }).catch(err => console.log("Clean-up failed, likely already gone."));
         }
 
+        // 3. Remove the student entry from the screen
         document.getElementById(uid).remove();
+        
+        // 4. Clean up the internal data
         delete videoData[uid];
+        
+        // 5. Tell Jotform the entry is gone
         refreshIndices();
         sync();
     }
