@@ -113,9 +113,9 @@
                 <div><label>Division</label><input type="text" class="div" oninput="sync()"></div>
                 <div class="del-col"></div>
             </div>
-            <div class="upload-area" id="up-initial">
+            <div class="upload-area" id="up-row-initial">
                 <label>Upload Video<span>*</span></label>
-                <input type="file" accept="video/*" onchange="handleUpload('initial', this.files[0])">
+                <input type="file" accept="video/*" onchange="handleUpload('row-initial', this.files[0])">
             </div>
         </div>
     </div>
@@ -222,7 +222,7 @@
         // 4. Construct Title: passage_recitation_firstname_surname_std10
         const videoTitle = `${story_telling}_${safeFName}_${safeSName}_std_${stdVal}`;
 
-        const area = document.getElementById(uid === 'initial' ? 'up-initial' : `up-${uid}`);
+        const area = document.getElementById("up-" + uid);
         area.innerHTML = `Uploading... <span id="p-${uid}">0%</span>`;
 
         try {
@@ -272,7 +272,7 @@
         const out = [];
         let allValid = true;
         document.querySelectorAll('.student-block').forEach((row) => {
-            const rowId = row.id === 'row-initial' ? 'initial' : row.id;
+            const rowId = row.id;
             const fName = row.querySelector('.fName').value;
             const gender = row.querySelector('.gender').value;
             const std = row.querySelector('.std').value;
