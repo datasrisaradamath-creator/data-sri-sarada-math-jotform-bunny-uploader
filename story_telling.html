@@ -165,7 +165,21 @@
         sync();
     }
 
-    function removeRow(uid) {
+    async function removeRow(uid) {
+        const vId = videoData[uid]?.videoId;
+        
+        // If there is a video, tell the worker to delete it from Bunny
+        if (vId) {
+            try {
+                await fetch(`${WORKER_URL}/delete-video`, {
+                    method: 'POST',
+                    body: JSON.stringify({ videoId: vId })
+                });
+            } catch (e) {
+                console.error("Could not delete video from server");
+            }
+        }
+
         document.getElementById(uid).remove();
         delete videoData[uid];
         refreshIndices();
