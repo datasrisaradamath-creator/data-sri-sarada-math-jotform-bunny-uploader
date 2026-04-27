@@ -31,13 +31,10 @@
     const CHECKMARK_SVG = `<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>`;
     const WORKER_URL = "https://your-worker.workers.dev";
     let students = [];
-    let standardOptions = [5, 6, 7]; // Default
+    const STDS = [5, 6, 7]; // JUNIOR RANGE
 
-    JFCustomWidget.subscribe("ready", (data) => {
-        // Detect category from Widget Settings in Jotform
-        const category = JFCustomWidget.getWidgetSetting('category');
-        if (category === 'Senior') standardOptions = [8, 9, 10];
-        
+    JFCustomWidget.subscribe("ready", () => {
+        // Automatically add first student if list is empty
         if (students.length === 0) addNewStudent();
     });
 
@@ -72,7 +69,7 @@
                         <label>Standard<span>*</span></label>
                         <select onchange="update(${i}, 'std', this.value)">
                             <option value="">Std</option>
-                            ${standardOptions.map(opt => `<option value="${opt}" ${s.std == opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                            ${STDS.map(opt => `<option value="${opt}" ${s.std == opt ? 'selected' : ''}>${opt}</option>`).join('')}
                         </select>
                     </div>
                     <div class="field-group small-field"><label>Division</label><input type="text" value="${s.div}" oninput="update(${i}, 'div', this.value)"></div>
@@ -93,10 +90,11 @@
             render(); return;
         }
         const section = document.getElementById(`upload-sec-${index}`);
-        section.innerHTML = `<span class="file-name-display">File: ${file.name}</span><div class="upload-action-box"><progress id="bar-${index}" value="0" max="100"></progress><div id="txt-${index}" style="font-size:11px;">Processing...</div></div>`;
+        section.innerHTML = `<span class="file-name-display">File: ${file.name}</span><div class="upload-action-box"><progress id="bar-${index}" value="0" max="100"></progress><div id="txt-${index}" style="font-size:11px;">Uploading...</div></div>`;
         
         students[index].tempLocalName = file.name;
-        const customTitle = `${students[index].fName}_Std${students[index].std}_${students[index].gender}_Storytelling`.replace(/\s+/g, '_');
+        const safeName = students[index].fName.replace(/\s+/g, '_');
+        const customTitle = `${safeName}_Std${students[index].std}_${students[index].gender}_Junior`.replace(/\s+/g, '_');
 
         const res = await fetch(`${WORKER_URL}/sign`, { method: 'POST', body: JSON.stringify({ title: customTitle }) });
         const creds = await res.json();
