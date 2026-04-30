@@ -594,6 +594,16 @@
         JFCustomWidget.sendData({ valid: allValid, value: prettyValue });
     }
 
+    // Returns true if a saved entry has at least one piece of real user data.
+    // Empty/draft rows (where the user hadn't filled anything) are skipped on restore
+    // so the widget doesn't show a stale "2 students" state when both rows are blank.
+    function hasRealData(entry) {
+        if (!entry) return false;
+        const txt = (v) => typeof v === 'string' ? v.trim() : '';
+        return !!(txt(entry.firstName) || txt(entry.middleName) || txt(entry.surname) ||
+            entry.gender || entry.standard || txt(entry.division) || entry.videoId);
+    }
+
     // Restore widget state from a previously saved value.
     // Tolerates three formats:
     //   1. Raw JSON array (legacy / storage layers)
@@ -624,10 +634,14 @@
 
         if (!parsed || parsed.length === 0) return false;
 
+        // Drop rows that have no real data — they're leftover empty drafts.
+        const meaningful = parsed.filter(hasRealData);
+        if (meaningful.length === 0) return false;
+
         document.getElementById('student-list').innerHTML = '';
         videoData = {};
         // Defensive: never restore more than the cap, even if old saved data had more.
-        parsed.slice(0, MAX_STUDENTS).forEach((entry) => addNewStudent(entry));
+        meaningful.slice(0, MAX_STUDENTS).forEach((entry) => addNewStudent(entry));
         return true;
     }
 
@@ -719,12 +733,16 @@
                 try { firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
             }
 
-            // Tell Jotform the field is invalid; importantly, do NOT call
-            // sendSubmit — that's what holds the page.
+            // Tell Jotform we're invalid via BOTH channels so it stays on this page:
+            // - sendData mirrors validity for the real-time channel.
+            // - sendSubmit({ valid:false }) is the documented way to block Next
+            //   for a Required widget.
             try { JFCustomWidget.sendData({ valid: false, value: state.prettyValue }); } catch (e) {}
+            try { JFCustomWidget.sendSubmit({ valid: false, value: state.prettyValue }); } catch (e) {}
             return;
         }
 
+        JFCustomWidget.sendData({ valid: true, value: state.prettyValue });
         JFCustomWidget.sendSubmit({ valid: true, value: state.prettyValue });
     });
 </script>
