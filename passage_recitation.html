@@ -6,43 +6,66 @@
     <script src="https://cdn.jsdelivr.net/npm/tus-js-client@latest/dist/tus.min.js"></script>
     <style>
         html, body { margin: 0; padding: 0; background: transparent; overflow-x: hidden; }
-        
-        /* 1. Body Padding: Ensures badge and buttons have clear space */
-        body { 
-            font-family: -apple-system, sans-serif; 
-            padding: 25px 5px 15px 5px; 
+
+        body {
+            font-family: -apple-system, sans-serif;
+            padding: 25px 5px 15px 5px;
         }
-        
-        #widget-wrap { 
-            display: flex; 
-            flex-direction: column; 
-            gap: 20px; 
-            width: 100%; 
+
+        #widget-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 100%;
             box-sizing: border-box;
         }
 
-        #student-list { 
-            display: flex; 
-            flex-direction: column; 
-            gap: 30px; 
+        /* Instructions Panel */
+        .instructions-box {
+            background: #fffbe6;
+            border: 1px solid #f1d56e;
+            border-left: 4px solid #f5a623;
+            border-radius: 8px;
+            padding: 14px 16px;
+            font-size: 13px;
+            color: #5b4a16;
+            line-height: 1.55;
+        }
+        .instructions-box h4 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            color: #7a5b0d;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .instructions-box ul { margin: 0; padding-left: 20px; }
+        .instructions-box li { margin-bottom: 4px; }
+        .instructions-box .warn {
+            color: #b54708;
+            font-weight: 700;
+        }
+
+        #student-list {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
             width: 100%;
         }
 
-        /* 2. Student Block: Clear marker with shadow and spacing */
-        .student-block { 
+        .student-block {
             position: relative;
-            padding: 25px 12px 20px 12px; 
+            padding: 25px 12px 20px 12px;
             border: 1px solid #e1e4e8;
             border-radius: 12px;
             background: #ffffff;
             box-shadow: 0 2px 8px rgba(0,0,0,0.04);
             display: flex;
-            flex-direction: column; 
+            flex-direction: column;
             gap: 18px;
             box-sizing: border-box;
         }
 
-        /* 3. Smart Counter Badge: Correctly positioned at top-left */
         .student-count-badge {
             position: absolute;
             top: -14px;
@@ -57,32 +80,31 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
-        /* 4. Layout Grids: Handling wide fields */
         .name-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
         .meta-row { display: grid; grid-template-columns: 1fr 1fr 100px auto; gap: 12px; align-items: end; }
 
-        /* 5. Mobile Responsiveness: Forced stacking */
         @media screen and (max-width: 650px) {
             .name-row, .meta-row { grid-template-columns: 1fr; }
             .ref-delete-btn { width: 100%; justify-content: center; }
         }
 
         label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px; color: #333; text-transform: uppercase; }
-        label span { color: #d73a49; } 
-        
-        input, select { 
-            width: 100%; padding: 10px; border: 1px solid #ccd0d5; border-radius: 6px; 
+        label span { color: #d73a49; }
+
+        input, select {
+            width: 100%; padding: 10px; border: 1px solid #ccd0d5; border-radius: 6px;
             font-size: 14px; background: #fafbfc; height: 40px; box-sizing: border-box;
         }
 
-        /* 6. Delete Button: Updated text and styling */
-        .ref-delete-btn { 
-            background: #f7fafc; color: #e53e3e; border: 1px solid #feb2b2; 
-            border-radius: 6px; cursor: pointer; display: flex; align-items: center; 
+        .ref-delete-btn {
+            background: #f7fafc; color: #e53e3e; border: 1px solid #feb2b2;
+            border-radius: 6px; cursor: pointer; display: flex; align-items: center;
             gap: 6px; height: 40px; padding: 0 12px; font-size: 13px; font-weight: 600;
         }
 
         .upload-area { padding: 15px; border: 2px dashed #3498db; border-radius: 8px; background: #f1f7fd; }
+        .upload-area.disabled { border-color: #cbd5e0; background: #f7fafc; opacity: 0.7; }
+        .upload-hint { font-size: 12px; color: #6b7280; margin-top: 6px; }
         .btn-add { background: #4a5568; color: white; border: none; padding: 14px 28px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px; width: fit-content; margin-bottom: 10px; }
         .btn-add:hover { background: #2d3748; }
         .uploaded-badge { display: inline-flex; align-items: center; background: #e6f4ea; color: #1e7e34; padding: 8px 16px; border-radius: 6px; font-weight: bold; }
@@ -91,8 +113,18 @@
 <body>
 
 <div id="widget-wrap">
-    <div id="student-list">
-        </div>
+    <div class="instructions-box">
+        <h4>How to fill this section</h4>
+        <ul>
+            <li>Click <b>+ Add Student</b> to add a new student entry.</li>
+            <li>Click <b>Delete Student</b> to remove a student you have added.</li>
+            <li>Fill in <b>First Name</b>, <b>Gender</b> and <b>Standard</b> <i>before</i> uploading the video — upload will stay disabled until these are filled.</li>
+            <li>Maximum upload size is <b>1 GB</b> per video.</li>
+            <li class="warn">Do NOT refresh this page while filling the form — your current data and uploads will be lost.</li>
+        </ul>
+    </div>
+
+    <div id="student-list"></div>
     <button type="button" class="btn-add" onclick="addNewStudent()">+ Add Student</button>
 </div>
 
@@ -100,39 +132,40 @@
     <div class="student-block" id="MASTER_TEMPLATE">
         <div class="student-count-badge">Student</div>
         <div class="name-row">
-            <div><label>First Name<span>*</span></label><input type="text" class="fName" oninput="sync()"></div>
-            <div><label>Middle Name</label><input type="text" class="mName" oninput="sync()"></div>
-            <div><label>Surname</label><input type="text" class="sName" oninput="sync()"></div>
+            <div><label>First Name<span>*</span></label><input type="text" class="fName" oninput="onFieldChange(this)"></div>
+            <div><label>Middle Name</label><input type="text" class="mName" oninput="onFieldChange(this)"></div>
+            <div><label>Surname</label><input type="text" class="sName" oninput="onFieldChange(this)"></div>
         </div>
         <div class="meta-row">
             <div><label>Gender<span>*</span></label>
-                <select class="gender" onchange="sync()">
+                <select class="gender" onchange="onFieldChange(this)">
                     <option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option>
                 </select>
             </div>
             <div><label>Standard<span>*</span></label>
-                <select class="std" onchange="sync()">
+                <select class="std" onchange="onFieldChange(this)">
                     <option value="">Select</option><option value="8">8</option><option value="9">9</option><option value="10">10</option>
                 </select>
             </div>
-            <div><label>Division</label><input type="text" class="div" oninput="sync()"></div>
+            <div><label>Division</label><input type="text" class="div" oninput="onFieldChange(this)"></div>
             <div class="del-col"></div>
         </div>
-        <div class="upload-area">
-            </div>
+        <div class="upload-area"></div>
     </div>
 </div>
 
 <script>
     const WORKER_URL = "https://bunny-uploader.datasrisaradamath.workers.dev";
+    const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024; // 1 GB
     const TRASH_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
-    
-    let videoData = {}; 
 
-    // AUTO-HEIGHT Logic: Watches for any changes and tells Jotform to resize
+    let videoData = {};
+    let isReady = false; // Avoid sending data before Jotform widget is ready
+
+    // AUTO-HEIGHT: tell Jotform to resize whenever the body grows/shrinks
     const resizeObserver = new ResizeObserver(() => {
-        const height = document.body.offsetHeight + 40; 
-        JFCustomWidget.requestFrameResize({ width: '100%', height: height });
+        const height = document.body.offsetHeight + 40;
+        try { JFCustomWidget.requestFrameResize({ width: '100%', height: height }); } catch (e) {}
     });
     resizeObserver.observe(document.body);
 
@@ -141,22 +174,68 @@
         rows.forEach((row, index) => {
             row.querySelector('.student-count-badge').innerText = `Student ${index + 1}`;
             const delCol = row.querySelector('.del-col');
-            // Allow deletion if more than 1 row exists
-            delCol.innerHTML = (rows.length > 1) 
+            delCol.innerHTML = (rows.length > 1)
                 ? `<button type="button" class="ref-delete-btn" onclick="removeRow('${row.id}')">${TRASH_ICON} Delete Student</button>`
                 : '';
         });
     }
 
+    // Returns true when the three mandatory text/select fields are filled
+    function mandatoryFilled(row) {
+        return !!(row.querySelector('.fName').value.trim()
+            && row.querySelector('.gender').value
+            && row.querySelector('.std').value);
+    }
+
+    // Renders the upload area for a row based on current state.
+    // States: uploaded (badge) | uploading (progress) | ready (file input) | locked (disabled message)
+    function renderUploadArea(row) {
+        const uid = row.id;
+        const area = row.querySelector('.upload-area');
+        area.id = "up-" + uid;
+
+        if (videoData[uid]?.videoId) {
+            area.classList.remove('disabled');
+            area.innerHTML = `<div class="uploaded-badge">✓ Video Uploaded</div>`;
+            return;
+        }
+
+        if (videoData[uid]?.uploading) {
+            // Don't overwrite an active upload's progress UI
+            return;
+        }
+
+        if (mandatoryFilled(row)) {
+            area.classList.remove('disabled');
+            area.innerHTML = `
+                <label>Upload Video<span>*</span></label>
+                <input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">
+                <div class="upload-hint">Maximum file size: 1 GB.</div>
+            `;
+        } else {
+            area.classList.add('disabled');
+            area.innerHTML = `
+                <label>Upload Video<span>*</span></label>
+                <input type="file" accept="video/*" disabled>
+                <div class="upload-hint">Please fill <b>First Name</b>, <b>Gender</b> and <b>Standard</b> to enable upload.</div>
+            `;
+        }
+    }
+
+    // Single change handler used by every input/select in a student block
+    function onFieldChange(el) {
+        const row = el.closest('.student-block');
+        if (row) renderUploadArea(row);
+        sync();
+    }
+
     function addNewStudent(savedData = null) {
         const list = document.getElementById('student-list');
         const uid = savedData?.uid || "u" + Date.now() + Math.floor(Math.random() * 1000);
-        
-        // Clone from the HIDDEN master template
+
         const block = document.getElementById('MASTER_TEMPLATE').cloneNode(true);
         block.id = uid;
-        
-        // Fill data if persisting
+
         if (savedData) {
             block.querySelector('.fName').value = savedData.firstName || "";
             block.querySelector('.mName').value = savedData.middleName || "";
@@ -167,125 +246,207 @@
             if (savedData.videoId) videoData[uid] = { videoId: savedData.videoId };
         }
 
-        // Setup Upload Area
-        const area = block.querySelector('.upload-area');
-        area.id = "up-" + uid;
-        if (videoData[uid]?.videoId) {
-            area.innerHTML = `<div class="uploaded-badge">✓ Video Uploaded</div>`;
-        } else {
-            area.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">`;
-        }
-        
         list.appendChild(block);
+        renderUploadArea(block);
         refreshIndices();
-        if (!savedData) sync(); // Only sync automatically for new blank rows
+        if (!savedData) sync();
     }
 
     async function removeRow(uid) {
-        // 1. Get the Video ID we stored when they uploaded
         const vId = videoData[uid]?.videoId;
 
-        // 2. If a video exists, tell the worker to delete it from Bunny.net
         if (vId) {
-            // We don't even need to wait for this (no 'await'), 
-            // just fire the request so the user doesn't feel a delay.
+            // Fire-and-forget: don't block UI on Bunny.net delete
             fetch(`${WORKER_URL}/delete`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ videoId: vId })
-            })
+            }).catch(() => {});
         }
 
-        // 3. Remove the student entry from the screen
         document.getElementById(uid).remove();
-        
-        // 4. Clean up the internal data
         delete videoData[uid];
-        
-        // 5. Tell Jotform the entry is gone
         refreshIndices();
         sync();
     }
 
     async function handleUpload(uid, file) {
-        const row = document.getElementById(uid === 'initial' ? 'row-initial' : uid);
-        
-        // 1. Grab data only from the current student block
+        const row = document.getElementById(uid);
+        if (!row) return;
+
+        const fileInput = row.querySelector('input[type="file"]');
+
+        // Hard guard: mandatory fields must be filled before any upload starts
+        if (!mandatoryFilled(row)) {
+            alert("Please enter First Name, Gender and Standard before uploading.");
+            if (fileInput) fileInput.value = "";
+            renderUploadArea(row);
+            return;
+        }
+
+        if (!file) return;
+
+        // 1 GB cap
+        if (file.size > MAX_UPLOAD_BYTES) {
+            alert("This file is larger than 1 GB. Please upload a smaller video.");
+            if (fileInput) fileInput.value = "";
+            renderUploadArea(row);
+            return;
+        }
+
         const fName = row.querySelector('.fName').value;
         const sName = row.querySelector('.sName').value;
         const stdVal = row.querySelector('.std').value;
-        
-        // 2. Validation: Ensure they filled the name/std before uploading
-        if (!file || !fName || !stdVal) { 
-            alert("Please enter First Name and Standard before uploading."); 
-            area.querySelector('input').value = ""; // Reset file input
-            return; 
-        }
 
-        // 3. Cleaning Logic: Lowercase and underscores only
         const clean = (str) => {
             if (!str) return "";
             return str.toString()
                 .toLowerCase()
                 .trim()
-                .replace(/[^a-z0-9]/gi, '_') // Replace special chars/spaces with _
-                .replace(/_+/g, '_');        // Collapse multiple ___ into one _
+                .replace(/[^a-z0-9]/gi, '_')
+                .replace(/_+/g, '_');
         };
 
         const safeFName = clean(fName);
         const safeSName = clean(sName) || "no_surname";
-        const passageRecitation = "passage_recitation";
-
-        // 4. Construct Title: passage_recitation_firstname_surname_std10
-        const videoTitle = `${passageRecitation}_${safeFName}_${safeSName}_std_${stdVal}`;
+        const passage_recitation = "passage_recitation";
+        const videoTitle = `${passage_recitation}_${safeFName}_${safeSName}_std_${stdVal}`;
 
         const area = document.getElementById("up-" + uid);
+        videoData[uid] = { ...(videoData[uid] || {}), uploading: true };
         area.innerHTML = `Uploading... <span id="p-${uid}">0%</span>`;
 
         try {
-            const res = await fetch(`${WORKER_URL}/sign`, { 
-                method: 'POST', 
+            const res = await fetch(`${WORKER_URL}/sign`, {
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: videoTitle }) 
+                body: JSON.stringify({ title: videoTitle })
             });
-            
+
             if (!res.ok) throw new Error("Worker Connection Failed");
-            
+
             const creds = await res.json();
-            
+
             new tus.Upload(file, {
                 endpoint: "https://video.bunnycdn.com/tusupload",
-                headers: { 
-                    AuthorizationSignature: creds.signature, 
-                    AuthorizationExpire: creds.expirationTime, 
-                    VideoId: creds.videoId, 
-                    LibraryId: creds.libraryId 
+                headers: {
+                    AuthorizationSignature: creds.signature,
+                    AuthorizationExpire: creds.expirationTime,
+                    VideoId: creds.videoId,
+                    LibraryId: creds.libraryId
                 },
-                onProgress: (s, t) => { 
+                onProgress: (s, t) => {
                     const pct = Math.round((s/t)*100);
                     const p = document.getElementById(`p-${uid}`);
-                    if (p) p.innerText = pct + "%"; 
+                    if (p) p.innerText = pct + "%";
                 },
                 onSuccess: () => {
-                    area.innerHTML = `<div class="uploaded-badge">✓ Video Uploaded</div>`;
                     videoData[uid] = { videoId: creds.videoId };
+                    const r = document.getElementById(uid);
+                    if (r) renderUploadArea(r);
                     sync();
                 },
                 onError: (err) => {
                     alert("Upload failed: " + err);
-                    // Reset to allow retry
-                    area.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">`;
+                    delete videoData[uid];
+                    const r = document.getElementById(uid);
+                    if (r) renderUploadArea(r);
                 }
             }).start();
-        } catch (e) { 
-            alert("Upload error: Please check your internet or Cloudflare Worker URL."); 
+        } catch (e) {
+            alert("Upload error: Please check your internet or Cloudflare Worker URL.");
             console.error(e);
-            area.innerHTML = `<label>Upload Video<span>*</span></label><input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">`;
+            delete videoData[uid];
+            renderUploadArea(row);
         }
     }
 
-    // VALIDATION Logic: Sends empty value if any mandatory field/video is missing
+    // Builds the value sent back to Jotform.
+    // - Submission value (sendData) only fires when EVERY row is fully valid.
+    // - Persistence value (sendSubmit data) is always full state so back/forward restores correctly.
     function sync() {
+        if (!isReady) return;
+
+        const out = [];
+        let allValid = true;
+
+        document.querySelectorAll('.student-block').forEach((row) => {
+            const rowId = row.id;
+            const fName = row.querySelector('.fName').value;
+            const gender = row.querySelector('.gender').value;
+            const std = row.querySelector('.std').value;
+            const vId = videoData[rowId]?.videoId;
+            if (!fName || !gender || !std || !vId) allValid = false;
+
+            out.push({
+                uid: rowId,
+                firstName: fName,
+                middleName: row.querySelector('.mName').value,
+                surname: row.querySelector('.sName').value,
+                gender: gender,
+                standard: std,
+                division: row.querySelector('.div').value,
+                videoId: vId || null
+            });
+        });
+
+        // Always persist the full state so back/forward navigation can restore it.
+        // When the form is incomplete we still send the JSON so Jotform stores it,
+        // but we mark it invalid so the form won't submit.
+        const payload = JSON.stringify(out);
+        JFCustomWidget.sendData({
+            valid: allValid && out.length > 0,
+            value: payload
+        });
+    }
+
+    // Restore widget state from a previously saved JSON payload.
+    function restoreFromValue(raw) {
+        if (!raw) return false;
+        let parsed;
+        try {
+            parsed = JSON.parse(raw);
+        } catch (e) {
+            return false;
+        }
+        if (!Array.isArray(parsed) || parsed.length === 0) return false;
+
+        document.getElementById('student-list').innerHTML = '';
+        videoData = {};
+        parsed.forEach((entry) => addNewStudent(entry));
+        return true;
+    }
+
+    JFCustomWidget.subscribe("ready", (data) => {
+        isReady = true;
+
+        // Jotform passes the previously saved value here when navigating
+        // back/forward or returning to a draft. Try several known shapes.
+        const saved = (data && (data.value || (data.fieldData && data.fieldData.value))) || '';
+
+        const restored = restoreFromValue(saved);
+        if (!restored) {
+            addNewStudent(); // Start with one blank student on first open
+        }
+        refreshIndices();
+        sync();
+    });
+
+    // Some Jotform contexts deliver the saved value via a separate event;
+    // handle it defensively so persistence works in more flows.
+    JFCustomWidget.subscribe("populate", (data) => {
+        const saved = (data && (data.value || (data.fieldData && data.fieldData.value))) || '';
+        if (saved) {
+            const restored = restoreFromValue(saved);
+            if (restored) {
+                refreshIndices();
+                sync();
+            }
+        }
+    });
+
+    // Make sure Jotform always has the latest value when the form is being submitted.
+    JFCustomWidget.subscribe("submit", () => {
         const out = [];
         let allValid = true;
         document.querySelectorAll('.student-block').forEach((row) => {
@@ -295,23 +456,23 @@
             const std = row.querySelector('.std').value;
             const vId = videoData[rowId]?.videoId;
             if (!fName || !gender || !std || !vId) allValid = false;
-            
-            out.push({ 
-                uid: row.id,
-                firstName: fName, 
+            out.push({
+                uid: rowId,
+                firstName: fName,
                 middleName: row.querySelector('.mName').value,
                 surname: row.querySelector('.sName').value,
                 gender: gender,
-                standard: std, 
+                standard: std,
                 division: row.querySelector('.div').value,
-                videoId: vId || null 
+                videoId: vId || null
             });
         });
-        const finalValue = allValid && out.length > 0 ? JSON.stringify(out) : "";
-        JFCustomWidget.sendData({ value: finalValue });
-    }
-
-    JFCustomWidget.subscribe("ready", () => {
-        refreshIndices();
+        JFCustomWidget.sendSubmit({
+            valid: allValid && out.length > 0,
+            value: JSON.stringify(out)
+        });
     });
 </script>
+
+</body>
+</html>
