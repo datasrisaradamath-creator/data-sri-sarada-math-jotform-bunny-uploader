@@ -105,8 +105,21 @@
         .upload-area { padding: 15px; border: 2px dashed #3498db; border-radius: 8px; background: #f1f7fd; }
         .upload-area.disabled { border-color: #cbd5e0; background: #f7fafc; opacity: 0.7; }
         .upload-hint { font-size: 12px; color: #6b7280; margin-top: 6px; }
+
+        /* Footer row holds the Add Student button + a live count */
+        .footer-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
         .btn-add { background: #4a5568; color: white; border: none; padding: 14px 28px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px; width: fit-content; margin-bottom: 10px; }
-        .btn-add:hover { background: #2d3748; }
+        .btn-add:hover:not(:disabled) { background: #2d3748; }
+        .btn-add:disabled { background: #a0aec0; cursor: not-allowed; opacity: 0.7; }
+        .student-count-display { font-size: 13px; color: #4a5568; font-weight: 600; }
+        .student-count-display .at-limit { color: #b54708; }
+
         .uploaded-badge { display: inline-flex; align-items: center; background: #e6f4ea; color: #1e7e34; padding: 8px 16px; border-radius: 6px; font-weight: bold; }
     </style>
 </head>
@@ -116,16 +129,21 @@
     <div class="instructions-box">
         <h4>How to fill this section</h4>
         <ul>
-            <li>Click <b>+ Add Student</b> to add a new student entry.</li>
+            <li>Click <b>+ Add Student</b> to add a new student entry. You can add up to <b>10 students</b>.</li>
             <li>Click <b>Delete Student</b> to remove a student you have added.</li>
             <li>Fill in <b>First Name</b>, <b>Gender</b> and <b>Standard</b> <i>before</i> uploading the video — upload will stay disabled until these are filled.</li>
+            <li>You <b>must upload a video</b> for every student before continuing to the next page.</li>
             <li>Maximum upload size is <b>1 GB</b> per video.</li>
             <li class="warn">Do NOT refresh this page while filling the form — your current data and uploads will be lost.</li>
         </ul>
     </div>
 
     <div id="student-list"></div>
-    <button type="button" class="btn-add" onclick="addNewStudent()">+ Add Student</button>
+
+    <div class="footer-row">
+        <button type="button" class="btn-add" id="btn-add-student" onclick="addNewStudent()">+ Add Student</button>
+        <div class="student-count-display" id="student-count-display"></div>
+    </div>
 </div>
 
 <div style="display:none;">
@@ -139,7 +157,7 @@
         <div class="meta-row">
             <div><label>Gender<span>*</span></label>
                 <select class="gender" onchange="onFieldChange(this)">
-                    <option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option>
+                    <option value="">Select<option value="Female">Female</option>
                 </select>
             </div>
             <div><label>Standard<span>*</span></label>
@@ -157,6 +175,7 @@
 <script>
     const WORKER_URL = "https://bunny-uploader.datasrisaradamath.workers.dev";
     const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024; // 1 GB
+    const MAX_STUDENTS = 10; // Hard cap on number of student entries
     const TRASH_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
 
     let videoData = {};
@@ -182,21 +201,6 @@
     }
 
     // ---------- Persistence layers (multi-fallback) ----------
-    //
-    // Jotform iframe widgets are sometimes loaded in sandboxes that block
-    // sessionStorage/localStorage (silent SecurityError). Some Jotform flows
-    // do not replay the saved value via `ready`. We therefore write the state
-    // to as many durable surfaces as possible and read from each on startup:
-    //
-    //   1. Jotform's `ready` event `value` field          (the official API)
-    //   2. window.name                                    (survives iframe reload, no storage perms needed)
-    //   3. sessionStorage                                  (per-tab, scoped by formId)
-    //   4. localStorage                                    (cross-tab, scoped by formId)
-    //
-    // window.name is the most reliable in restricted iframes because it is a
-    // property of the frame itself and is preserved across navigations of
-    // that frame's document — no origin or storage policy gates it.
-
     function storageKey() {
         return "jfWidgetState::" + (formIdForStorage || "default");
     }
@@ -211,7 +215,6 @@
     function persistAll(jsonString) {
         const key = storageKey();
         const wrapped = JSON.stringify({ k: key, v: jsonString || "" });
-        // window.name is a string; safe to overwrite. Survives iframe document reloads.
         try { window.name = wrapped; } catch (e) {}
         safeSet(sessionStorage, key, jsonString || "");
         safeSet(localStorage,   key, jsonString || "");
@@ -248,6 +251,11 @@
     });
     resizeObserver.observe(document.body);
 
+    // Returns current count of student rows in the live list.
+    function studentCount() {
+        return document.querySelectorAll('#student-list .student-block').length;
+    }
+
     function refreshIndices() {
         const rows = document.querySelectorAll('#student-list .student-block');
         rows.forEach((row, index) => {
@@ -257,6 +265,22 @@
                 ? `<button type="button" class="ref-delete-btn" onclick="removeRow('${row.id}')">${TRASH_ICON} Delete Student</button>`
                 : '';
         });
+
+        // Update Add button + count display based on the cap.
+        const count = rows.length;
+        const addBtn = document.getElementById('btn-add-student');
+        const countDisplay = document.getElementById('student-count-display');
+        if (addBtn) {
+            const atLimit = count >= MAX_STUDENTS;
+            addBtn.disabled = atLimit;
+            addBtn.title = atLimit ? `Maximum ${MAX_STUDENTS} students reached` : '';
+        }
+        if (countDisplay) {
+            const atLimit = count >= MAX_STUDENTS;
+            countDisplay.innerHTML = atLimit
+                ? `<span class="at-limit">${count} / ${MAX_STUDENTS} students (limit reached)</span>`
+                : `${count} / ${MAX_STUDENTS} students`;
+        }
     }
 
     // Returns true when the three mandatory text/select fields are filled
@@ -267,7 +291,6 @@
     }
 
     // Renders the upload area for a row based on current state.
-    // States: uploaded (badge) | uploading (progress) | ready (file input) | locked (disabled message)
     function renderUploadArea(row) {
         const uid = row.id;
         const area = row.querySelector('.upload-area');
@@ -280,8 +303,7 @@
         }
 
         if (videoData[uid]?.uploading) {
-            // Don't overwrite an active upload's progress UI
-            return;
+            return; // Don't overwrite an active upload's progress UI
         }
 
         if (mandatoryFilled(row)) {
@@ -309,6 +331,14 @@
     }
 
     function addNewStudent(savedData = null) {
+        // Hard cap: never add more than MAX_STUDENTS.
+        if (studentCount() >= MAX_STUDENTS) {
+            if (!savedData) {
+                alert(`You can add at most ${MAX_STUDENTS} students. Please delete an existing entry before adding another.`);
+            }
+            return;
+        }
+
         const list = document.getElementById('student-list');
         const uid = makeUid(savedData?.uid);
 
@@ -334,7 +364,13 @@
             block.querySelector('.gender').value = savedData.gender || "";
             block.querySelector('.std').value = savedData.standard || "";
             block.querySelector('.div').value = savedData.division || "";
-            if (savedData.videoId) videoData[uid] = { videoId: savedData.videoId };
+            if (savedData.videoId) {
+                videoData[uid] = {
+                    videoId: savedData.videoId,
+                    libraryId: savedData.libraryId || null,
+                    videoName: savedData.videoName || null
+                };
+            }
         }
 
         list.appendChild(block);
@@ -368,7 +404,6 @@
 
         const fileInput = row.querySelector('input[type="file"]');
 
-        // Hard guard: mandatory fields must be filled before any upload starts
         if (!mandatoryFilled(row)) {
             alert("Please enter First Name, Gender and Standard before uploading.");
             if (fileInput) fileInput.value = "";
@@ -378,7 +413,6 @@
 
         if (!file) return;
 
-        // 1 GB cap
         if (file.size > MAX_UPLOAD_BYTES) {
             alert("This file is larger than 1 GB. Please upload a smaller video.");
             if (fileInput) fileInput.value = "";
@@ -433,7 +467,11 @@
                     if (p) p.innerText = pct + "%";
                 },
                 onSuccess: () => {
-                    videoData[uid] = { videoId: creds.videoId };
+                    videoData[uid] = {
+                        videoId: creds.videoId,
+                        libraryId: creds.libraryId,
+                        videoName: videoTitle
+                    };
                     const r = findRow(uid);
                     if (r) renderUploadArea(r);
                     sync();
@@ -453,17 +491,71 @@
         }
     }
 
-    // Reads the current form state and returns { payload, allValid }.
+    // Builds a Bunny.net iframe play URL when both libraryId and videoId are known.
+    // This URL is directly viewable in a browser (click to watch) and also valid
+    // for use as `<iframe src="...">` to embed.
+    function buildVideoUrl(libraryId, videoId) {
+        if (!libraryId || !videoId) return "";
+        return `https://iframe.mediadelivery.net/play/${libraryId}/${videoId}`;
+    }
+
+    // Returns a human-readable, multi-line representation of all entries that
+    // looks great in auto-reply emails and Google Sheets. Each student gets
+    // its own block with name, gender, class, video name, video id and a play URL.
+    function formatPretty(entries) {
+        if (!entries.length) return "(no students submitted)";
+
+        const lines = [];
+        lines.push(`Student Submissions — ${entries.length} student${entries.length === 1 ? '' : 's'}`);
+        lines.push("");
+
+        entries.forEach((s, i) => {
+            const fullName = [s.firstName, s.middleName, s.surname].filter(Boolean).join(' ').trim() || "(name not provided)";
+            const classDisplay = s.standard
+                ? (s.division ? `${s.standard} (Division ${s.division})` : `${s.standard}`)
+                : "(not provided)";
+            const videoUrl = buildVideoUrl(s.libraryId, s.videoId);
+
+            lines.push(`Student ${i + 1}`);
+            lines.push(`  Name: ${fullName}`);
+            lines.push(`  Gender: ${s.gender || '(not provided)'}`);
+            lines.push(`  Class: ${classDisplay}`);
+            lines.push(`  Video Name: ${s.videoName || '(not uploaded)'}`);
+            lines.push(`  Video ID: ${s.videoId || '(not uploaded)'}`);
+            if (videoUrl) lines.push(`  Video URL: ${videoUrl}`);
+            lines.push("");
+        });
+
+        return lines.join("\n").trimEnd();
+    }
+
+    // Marker used to embed the raw JSON at the end of the value string.
+    // Restoration code looks for this marker so back/forward navigation still works
+    // even when Jotform replays only the formatted value (not our own storage layers).
+    const RAW_DATA_MARKER = "--- RAW DATA (do not edit) ---";
+
+    // Reads the current form state and returns:
+    //   - payload      : raw JSON string (used internally for storage layers)
+    //   - prettyValue  : human-readable multi-line text PLUS embedded JSON
+    //                    (this is what we send to Jotform for emails/Sheets)
+    //   - allValid     : at-least-1 row AND every row has firstName + gender + std + video
+    //   - missing      : 1-based indices of incomplete rows
+    //   - count        : total row count
     function collectState() {
         const out = [];
+        const missing = [];
         let allValid = true;
-        document.querySelectorAll('.student-block').forEach((row) => {
+        document.querySelectorAll('#student-list .student-block').forEach((row, idx) => {
             const rowId = row.id;
-            const fName = row.querySelector('.fName').value;
+            const fName = row.querySelector('.fName').value.trim();
             const gender = row.querySelector('.gender').value;
             const std = row.querySelector('.std').value;
-            const vId = videoData[rowId]?.videoId;
-            if (!fName || !gender || !std || !vId) allValid = false;
+            const vData = videoData[rowId] || {};
+            const vId = vData.videoId;
+            if (!fName || !gender || !std || !vId) {
+                allValid = false;
+                missing.push(idx + 1);
+            }
 
             out.push({
                 uid: rowId,
@@ -473,60 +565,82 @@
                 gender: gender,
                 standard: std,
                 division: row.querySelector('.div').value,
-                videoId: vId || null
+                videoId: vId || null,
+                videoName: vData.videoName || null,
+                libraryId: vData.libraryId || null
             });
         });
+
+        const payload = JSON.stringify(out);
+        const prettyValue = formatPretty(out) + "\n\n" + RAW_DATA_MARKER + "\n" + payload;
+
         return {
-            payload: JSON.stringify(out),
-            allValid: allValid && out.length > 0
+            payload,
+            prettyValue,
+            allValid: allValid && out.length > 0,
+            missing,
+            count: out.length
         };
     }
 
     // Real-time sync — runs on every change.
-    // For custom iframe widgets, Jotform checks the `valid` flag passed to
-    // sendData() to decide whether to allow the user to advance to the next
-    // page. So we send the REAL validity here. Persistence across navigation
-    // is preserved by the multi-layer backup in persistAll().
+    // - Storage layers get the raw JSON (compact, easy to parse on restore).
+    // - Jotform gets the pretty multi-line value (renders nicely in emails/Sheets,
+    //   and still contains the raw JSON at the end for our own re-parse).
     function sync() {
         if (!isReady) return;
-        const { payload, allValid } = collectState();
+        const { payload, prettyValue, allValid } = collectState();
         persistAll(payload);
-        JFCustomWidget.sendData({ valid: allValid, value: payload });
+        JFCustomWidget.sendData({ valid: allValid, value: prettyValue });
     }
 
-    // Restore widget state from a previously saved JSON payload.
+    // Restore widget state from a previously saved value.
+    // Tolerates three formats:
+    //   1. Raw JSON array (legacy / storage layers)
+    //   2. Pretty value with JSON embedded after RAW_DATA_MARKER (current format)
+    //   3. Anything else → fail and the caller falls back to other persistence layers
     function restoreFromValue(raw) {
         if (!raw) return false;
-        let parsed;
+
+        let parsed = null;
+
+        // Try raw JSON first (works for storage-layer data)
         try {
-            parsed = JSON.parse(raw);
-        } catch (e) {
-            return false;
+            const direct = JSON.parse(raw);
+            if (Array.isArray(direct)) parsed = direct;
+        } catch (e) { /* fall through to marker */ }
+
+        // Try the embedded JSON marker (works for Jotform-replayed pretty values)
+        if (!parsed) {
+            const idx = raw.indexOf(RAW_DATA_MARKER);
+            if (idx >= 0) {
+                const tail = raw.substring(idx + RAW_DATA_MARKER.length).trim();
+                try {
+                    const arr = JSON.parse(tail);
+                    if (Array.isArray(arr)) parsed = arr;
+                } catch (e) { /* unparseable; give up */ }
+            }
         }
-        if (!Array.isArray(parsed) || parsed.length === 0) return false;
+
+        if (!parsed || parsed.length === 0) return false;
 
         document.getElementById('student-list').innerHTML = '';
         videoData = {};
-        parsed.forEach((entry) => addNewStudent(entry));
+        // Defensive: never restore more than the cap, even if old saved data had more.
+        parsed.slice(0, MAX_STUDENTS).forEach((entry) => addNewStudent(entry));
         return true;
     }
 
     JFCustomWidget.subscribe("ready", function readyHandler() {
         isReady = true;
 
-        // Jotform's API has shipped two shapes for the ready callback over the years:
-        //   (a) function(data) where data is { formId, value, fieldData, ... }
-        //   (b) function(formId, value) — separate positional args
-        // Read raw `arguments` so we work in either case.
         const args = arguments;
         const a0 = args[0];
         const a1 = args[1];
 
-        // Try every possible delivery shape Jotform might use
         let fromJotform = "";
         let formIdGuess = "";
         if (typeof a0 === 'string') {
-            // shape (b): formId is first arg, value might be second
             formIdGuess = a0;
             fromJotform = (typeof a1 === 'string') ? a1 : "";
         } else if (a0 && typeof a0 === 'object') {
@@ -548,8 +662,6 @@
 
         console.log('[StudentWidget] ready');
         console.log('  storage probe   :', probeStorage());
-        console.log('  raw args[0]     :', a0);
-        console.log('  raw args[1]     :', a1);
         console.log('  formId          :', formIdForStorage);
         console.log('  fromJotform len :', (fromJotform || '').length);
         console.log('  fromWindowName  :', (layers.fromWindowName || '').length);
@@ -565,8 +677,6 @@
         sync();
     });
 
-    // Some Jotform contexts deliver the saved value via a separate event;
-    // handle it defensively so persistence works in more flows.
     JFCustomWidget.subscribe("populate", (data) => {
         const saved = (data && (data.value || (data.fieldData && data.fieldData.value))) || '';
         console.log('[StudentWidget] populate — valueLen=%s', (saved || '').length);
@@ -580,15 +690,42 @@
     });
 
     // Fired on Next button (multi-page) AND on final form submit.
-    // We always send the latest value so Jotform persists it.
-    // `valid` reflects real completeness — Jotform uses it for required-field enforcement.
+    //
+    // HARD-BLOCK on invalid: when any row is incomplete (missing required field
+    // or missing uploaded video), we deliberately do NOT call sendSubmit.
+    // Jotform's submit handler waits for sendSubmit before advancing, so the
+    // user stays on this page. We show a clear alert telling them what to fix.
     JFCustomWidget.subscribe("submit", () => {
-        const { payload, allValid } = collectState();
-        persistAll(payload);
-        console.log('[StudentWidget] submit — valid=%s payloadLen=%s', allValid, payload.length);
-        // Always send valid:true on submit so Jotform stores the value for
-        // back/forward replay. (Required-field enforcement is parked as an RFE.)
-        JFCustomWidget.sendSubmit({ valid: true, value: payload });
+        const state = collectState();
+        persistAll(state.payload);
+        console.log('[StudentWidget] submit — valid=%s count=%s missing=%o',
+            state.allValid, state.count, state.missing);
+
+        if (!state.allValid) {
+            let msg;
+            if (state.count === 0) {
+                msg = "Please add at least one student before continuing.";
+            } else if (state.missing.length === 1) {
+                msg = `Student ${state.missing[0]} is incomplete. Please fill First Name, Gender, Standard and upload a video for that student before continuing.`;
+            } else {
+                msg = `Students ${state.missing.join(', ')} are incomplete. Please fill First Name, Gender, Standard and upload a video for each before continuing.`;
+            }
+            alert(msg);
+
+            // Scroll the first incomplete row into view so the user sees what to fix.
+            const rows = document.querySelectorAll('#student-list .student-block');
+            const firstBad = rows[(state.missing[0] || 1) - 1];
+            if (firstBad) {
+                try { firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+            }
+
+            // Tell Jotform the field is invalid; importantly, do NOT call
+            // sendSubmit — that's what holds the page.
+            try { JFCustomWidget.sendData({ valid: false, value: state.prettyValue }); } catch (e) {}
+            return;
+        }
+
+        JFCustomWidget.sendSubmit({ valid: true, value: state.prettyValue });
     });
 </script>
 
