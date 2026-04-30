@@ -166,6 +166,12 @@
             line-height: 1.45;
         }
         .widget-error-banner.visible { display: block; }
+        .widget-error-banner.success {
+            background: #f0fdf4;
+            border-color: #86efac;
+            border-left-color: #16a34a;
+            color: #14532d;
+        }
         .student-block.has-error {
             border-color: #fc8181;
             box-shadow: 0 0 0 3px rgba(252, 129, 129, 0.18);
@@ -219,7 +225,8 @@
             <li>Fill in <b>First Name</b>, <b>Gender</b> and <b>Standard</b> <i>before</i> uploading the video — upload will stay disabled until these are filled.</li>
             <li>You <b>must upload a video</b> for every student before continuing to the next page.</li>
             <li>Maximum upload size is <b>1 GB</b> per video.</li>
-            <li class="warn">Do NOT refresh this page while filling the form — your current data and uploads will be lost.</li>
+            <li>To change a video after uploading, click <b>Replace video</b> next to the green badge. Your previous video stays in place until the new upload succeeds — so a failed/cancelled replacement never loses the original.</li>
+            <li>Your entries are <b>auto-saved</b> in this browser as you type, so navigating between pages or refreshing won't lose your progress.</li>
         </ul>
     </div>
 
@@ -434,11 +441,38 @@
     }
     function clearAllErrors() {
         const banner = document.getElementById('widget-error-banner');
-        if (banner) banner.classList.remove('visible');
+        if (banner) {
+            banner.classList.remove('visible', 'success');
+            banner.textContent = '';
+        }
         document.querySelectorAll('.student-block.has-error').forEach(r => r.classList.remove('has-error'));
         document.querySelectorAll('.field-error').forEach(el => el.classList.remove('field-error'));
         document.querySelectorAll('.field-error-badge').forEach(el => el.remove());
         document.querySelectorAll('.upload-area.has-error').forEach(el => el.classList.remove('has-error'));
+    }
+
+    function showSuccessBanner() {
+        const banner = document.getElementById('widget-error-banner');
+        if (!banner) return;
+        banner.textContent = '✓ All required fields are completed. You can continue to the next page.';
+        banner.classList.add('visible', 'success');
+    }
+
+    // After every change, if the error banner was already visible (i.e. we
+    // had previously failed validation), swap it to the green "all good"
+    // banner once the user has fixed everything. Until first failure the
+    // banner stays hidden — we don't want to nag a user who's still filling
+    // the form for the first time.
+    function refreshBannerState() {
+        const banner = document.getElementById('widget-error-banner');
+        if (!banner || !banner.classList.contains('visible')) return;
+        const state = collectState();
+        if (state.allValid) {
+            if (!banner.classList.contains('success')) showSuccessBanner();
+        } else if (banner.classList.contains('success')) {
+            // User regressed (e.g. emptied a field) — hide the green banner.
+            clearAllErrors();
+        }
     }
     function markFieldEmpty(el) {
         if (!el || (el.value && el.value.trim())) return;
@@ -511,6 +545,7 @@
             }
         }
         sync();
+        refreshBannerState();
     }
 
     function addNewStudent(savedData = null) {
@@ -579,6 +614,7 @@
         delete videoData[uid];
         refreshIndices();
         sync();
+        refreshBannerState();
     }
 
     async function handleUpload(uid, file) {
@@ -664,6 +700,7 @@
                         if (mandatoryFilled(r)) r.classList.remove('has-error');
                     }
                     sync();
+                    refreshBannerState();
                 },
                 onError: (err) => {
                     alert("Upload failed: " + err);
@@ -806,6 +843,7 @@
                         if (mandatoryFilled(r)) r.classList.remove('has-error');
                     }
                     sync();
+                    refreshBannerState();
                 },
                 onError: (err) => {
                     alert("Replacement upload failed: " + err + "\n\nYour previous video is still in place.");
@@ -1098,10 +1136,14 @@
     });
 
     // Submit handler — fires on BOTH the multi-page Next button and the final
-    // Submit button. On invalid: render Jotform-style inline errors (red banner
-    // at the top of the widget + red borders + "This field is required" badges)
-    // and DO NOT call sendSubmit (best-effort hard block). On valid: clear all
-    // error UI and call sendSubmit so the page advances.
+    // Submit button. We use the most aggressive blocking strategy possible
+    // from inside an iframe widget:
+    //   1. Render JotForm-style inline error UI (red banner + borders + badges).
+    //   2. Show a synchronous alert() popup so the user is forced to ACK.
+    //   3. Tell JotForm via every channel (sendData + sendSubmit) we're invalid.
+    //   4. Throw an exception synchronously to abort JotForm's submit pipeline.
+    //   5. Schedule an async throw on the next tick to escape any try/catch
+    //      JotForm may wrap our handler in.
     JFCustomWidget.subscribe("submit", () => {
         const state = collectState();
         persistAll(state.payload);
@@ -1109,13 +1151,34 @@
             state.allValid, state.count, state.missing);
 
         if (!state.allValid) {
+            // (1) inline UI
             showInlineErrors(state);
-            // Best-effort: also tell Jotform we're invalid via sendData.
+
+            // (2) build & show alert (synchronous; blocks until user clicks OK)
+            let msg;
+            if (state.count === 0) {
+                msg = "Cannot continue.\n\nPlease add at least one student before proceeding.";
+            } else if (state.missing.length === 1) {
+                msg = `Cannot continue.\n\nStudent ${state.missing[0]} is incomplete. Please fill First Name, Gender, Standard and upload a video before proceeding.`;
+            } else {
+                msg = `Cannot continue.\n\nStudents ${state.missing.join(', ')} are incomplete. Please fill all required fields and upload a video for each before proceeding.`;
+            }
+            alert(msg);
+
+            // (3) inform JotForm via both channels
             try { JFCustomWidget.sendData({ valid: false, value: state.prettyValue }); } catch (e) {}
-            // Hard-block attempt: do NOT call sendSubmit. (Jotform may still
-            // advance after its internal timeout — that's a known iframe-widget
-            // limitation we cannot fully fix from this side.)
-            return;
+            try { JFCustomWidget.sendSubmit({ valid: false, value: state.prettyValue }); } catch (e) {}
+
+            // (5) async throw — runs after our handler returns, escapes any
+            //     try/catch JotForm may have around the handler call.
+            setTimeout(() => {
+                throw new Error("StudentWidget: validation failed (async block)");
+            }, 0);
+
+            // (4) sync throw — aborts the rest of JotForm's submit pipeline now.
+            throw new Error("StudentWidget: validation failed — " +
+                state.missing.length + " incomplete row" +
+                (state.missing.length === 1 ? "" : "s"));
         }
 
         clearAllErrors();
