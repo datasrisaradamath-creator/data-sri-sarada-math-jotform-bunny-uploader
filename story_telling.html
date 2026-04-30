@@ -434,9 +434,11 @@
         };
 
         const safeFName = clean(fName);
-        const safeSName = clean(sName) || "no_surname";
-        const story_telling = "story_telling";
-        const videoTitle = `${story_telling}_${safeFName}_${safeSName}_std_${stdVal}`;
+        const safeSName = clean(sName);
+        const titleParts = ["story_telling", safeFName];
+        if (safeSName) titleParts.push(safeSName);
+        titleParts.push("std", stdVal);
+        const videoTitle = titleParts.join("_");
 
         const area = document.getElementById("up-" + uid);
         videoData[uid] = { ...(videoData[uid] || {}), uploading: true };
@@ -500,8 +502,8 @@
     }
 
     // Returns a human-readable, multi-line representation of all entries.
-    // Designed to look clean in auto-reply emails and Google Sheets cells.
-    // (Video ID is intentionally omitted — Video Name + Video URL is enough.)
+    // No indentation: long-line wraps in emails (e.g. Video URL) stay flush-left
+    // and remain readable. Empty line between students for visual separation.
     function formatPretty(entries) {
         if (!entries.length) return "(no students submitted)";
 
@@ -516,16 +518,17 @@
                 : "(not provided)";
             const videoUrl = buildVideoUrl(s.libraryId, s.videoId);
 
+            if (i > 0) lines.push(""); // blank separator between students
             lines.push(`Student ${i + 1}`);
-            lines.push(`  Name: ${fullName}`);
-            lines.push(`  Gender: ${s.gender || '(not provided)'}`);
-            lines.push(`  Class: ${classDisplay}`);
-            lines.push(`  Video Name: ${s.videoName || '(not uploaded)'}`);
-            if (videoUrl) lines.push(`  Video URL: ${videoUrl}`);
-            lines.push("");
+            lines.push(`Name: ${fullName}`);
+            lines.push(`Gender: ${s.gender || '(not provided)'}`);
+            lines.push(`Class: ${classDisplay}`);
+            lines.push(`Video Name: ${s.videoName || '(not uploaded)'}`);
+            lines.push(`Video ID: ${s.videoId || '(not uploaded)'}`);
+            if (videoUrl) lines.push(`Video URL: ${videoUrl}`);
         });
 
-        return lines.join("\n").trimEnd();
+        return lines.join("\n");
     }
 
     // Legacy marker — older saved submissions/drafts had raw JSON appended after this
@@ -604,23 +607,81 @@
             entry.gender || entry.standard || txt(entry.division) || entry.videoId);
     }
 
+    // Parses the pretty-text format we generate in formatPretty() back into
+    // structured entries. Used when Jotform replays the submitted value during
+    // edit-submission flow (Jotform stores the pretty text, not raw JSON).
+    function parsePrettyText(raw) {
+        if (typeof raw !== 'string' || raw.indexOf('Student ') === -1) return null;
+
+        const blocks = raw.split(/(?:^|\n)Student \d+\s*\n/).slice(1);
+        const entries = [];
+        const valOrEmpty = (v) => (!v || v === '(not provided)' || v === '(not uploaded)' || v === '(name not provided)') ? '' : v;
+
+        blocks.forEach((block) => {
+            const fields = {};
+            block.split('\n').forEach((line) => {
+                const m = line.match(/^([A-Za-z][A-Za-z ]*?):\s*(.+?)\s*$/);
+                if (m) fields[m[1].toLowerCase().trim()] = valOrEmpty(m[2]);
+            });
+
+            const entry = {};
+
+            // Name → split on whitespace into firstName / middleName / surname (best-effort)
+            if (fields['name']) {
+                const parts = fields['name'].split(/\s+/).filter(Boolean);
+                entry.firstName = parts[0] || '';
+                if (parts.length === 2) {
+                    entry.surname = parts[1];
+                } else if (parts.length >= 3) {
+                    entry.middleName = parts.slice(1, -1).join(' ');
+                    entry.surname   = parts[parts.length - 1];
+                }
+            }
+
+            entry.gender = fields['gender'] || '';
+
+            // "5" or "5 (Division A)"
+            if (fields['class']) {
+                const m = fields['class'].match(/^(\S+)(?:\s*\(Division\s+(.+?)\))?$/);
+                if (m) {
+                    entry.standard = m[1];
+                    if (m[2]) entry.division = m[2];
+                }
+            }
+
+            entry.videoName = fields['video name'] || null;
+            entry.videoId   = fields['video id']   || null;
+
+            // Extract libraryId from the Video URL if present
+            const urlMatch = (fields['video url'] || '').match(/play\/(\d+)\/([^\s]+)/);
+            if (urlMatch) {
+                entry.libraryId = urlMatch[1];
+                if (!entry.videoId) entry.videoId = urlMatch[2];
+            }
+
+            if (hasRealData(entry)) entries.push(entry);
+        });
+
+        return entries.length ? entries : null;
+    }
+
     // Restore widget state from a previously saved value.
     // Tolerates three formats:
-    //   1. Raw JSON array (legacy / storage layers)
-    //   2. Pretty value with JSON embedded after RAW_DATA_MARKER (current format)
-    //   3. Anything else → fail and the caller falls back to other persistence layers
+    //   1. Raw JSON array (storage-layer data)
+    //   2. Legacy pretty value with JSON embedded after RAW_DATA_MARKER
+    //   3. Current pretty-text format (Jotform-replayed value during edit-submission)
     function restoreFromValue(raw) {
         if (!raw) return false;
 
         let parsed = null;
 
-        // Try raw JSON first (works for storage-layer data)
+        // (1) Raw JSON
         try {
             const direct = JSON.parse(raw);
             if (Array.isArray(direct)) parsed = direct;
-        } catch (e) { /* fall through to marker */ }
+        } catch (e) { /* fall through */ }
 
-        // Try the embedded JSON marker (works for Jotform-replayed pretty values)
+        // (2) Legacy embedded-JSON marker
         if (!parsed) {
             const idx = raw.indexOf(RAW_DATA_MARKER);
             if (idx >= 0) {
@@ -628,8 +689,14 @@
                 try {
                     const arr = JSON.parse(tail);
                     if (Array.isArray(arr)) parsed = arr;
-                } catch (e) { /* unparseable; give up */ }
+                } catch (e) { /* fall through */ }
             }
+        }
+
+        // (3) Pretty-text format — used when Jotform replays the submission's
+        //     formatted value during edit-submission flow.
+        if (!parsed) {
+            parsed = parsePrettyText(raw);
         }
 
         if (!parsed || parsed.length === 0) return false;
@@ -704,20 +771,40 @@
     });
 
     // Submit handler — fires on BOTH the multi-page Next button and the final
-    // Submit button. We always respond with sendSubmit; the `valid` flag tells
-    // Jotform whether to advance. Jotform's native required-field machinery
-    // (Required toggle ON in the form builder) shows its own inline error and
-    // blocks navigation/submission when valid:false is reported.
+    // Submit button. Per Jotform's official developer guidance, ALWAYS call
+    // sendSubmit and let the `valid` flag drive enforcement. We also alert the
+    // user when invalid so they understand what's wrong (Jotform's inline
+    // required-error UI is sometimes flaky for iframe widgets).
     JFCustomWidget.subscribe("submit", () => {
         const state = collectState();
         persistAll(state.payload);
         console.log('[StudentWidget] submit — valid=%s count=%s missing=%o',
             state.allValid, state.count, state.missing);
 
-        JFCustomWidget.sendSubmit({
-            valid: state.allValid,
-            value: state.prettyValue
-        });
+        if (!state.allValid) {
+            let msg;
+            if (state.count === 0) {
+                msg = "Please add at least one student before continuing.";
+            } else if (state.missing.length === 1) {
+                msg = `Student ${state.missing[0]} is incomplete. Please fill First Name, Gender, Standard and upload a video for that student before continuing.`;
+            } else {
+                msg = `Students ${state.missing.join(', ')} are incomplete. Please fill First Name, Gender, Standard and upload a video for each before continuing.`;
+            }
+            alert(msg);
+
+            // Scroll the first incomplete row into view.
+            const rows = document.querySelectorAll('#student-list .student-block');
+            const firstBad = rows[(state.missing[0] || 1) - 1];
+            if (firstBad) {
+                try { firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+            }
+        }
+
+        // ALWAYS respond to Jotform's submit event with both flags set.
+        // sendData mirrors the validity in real time; sendSubmit responds to
+        // this specific submit/Next event. Both are needed per Jotform's docs.
+        JFCustomWidget.sendData({   valid: state.allValid, value: state.prettyValue });
+        JFCustomWidget.sendSubmit({ valid: state.allValid, value: state.prettyValue });
     });
 </script>
 
