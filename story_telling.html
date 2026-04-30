@@ -225,8 +225,7 @@
             <li>Fill in <b>First Name</b>, <b>Gender</b> and <b>Standard</b> <i>before</i> uploading the video — upload will stay disabled until these are filled.</li>
             <li>You <b>must upload a video</b> for every student before continuing to the next page.</li>
             <li>Maximum upload size is <b>1 GB</b> per video.</li>
-            <li>To change a video after uploading, click <b>Replace video</b> next to the green badge. Your previous video stays in place until the new upload succeeds — so a failed/cancelled replacement never loses the original.</li>
-            <li>Your entries are <b>auto-saved</b> in this browser as you type, so navigating between pages or refreshing won't lose your progress.</li>
+            <li>To change a video after uploading, click <b>Replace video</b> next to the green badge. Your previous video stays in place until the new upload succeeds.</li>
         </ul>
     </div>
 
@@ -454,7 +453,7 @@
     function showSuccessBanner() {
         const banner = document.getElementById('widget-error-banner');
         if (!banner) return;
-        banner.textContent = '✓ All required fields are completed. You can continue to the next page.';
+        banner.textContent = '✓ No more errors in student data.';
         banner.classList.add('visible', 'success');
     }
 
