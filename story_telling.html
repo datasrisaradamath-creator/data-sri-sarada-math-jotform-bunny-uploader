@@ -121,6 +121,91 @@
         .student-count-display .at-limit { color: #b54708; }
 
         .uploaded-badge { display: inline-flex; align-items: center; background: #e6f4ea; color: #1e7e34; padding: 8px 16px; border-radius: 6px; font-weight: bold; }
+
+        /* Replace-video controls */
+        .upload-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .edit-upload-btn {
+            background: #fff;
+            color: #2b6cb0;
+            border: 1px solid #4299e1;
+            border-radius: 6px;
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .edit-upload-btn:hover { background: #ebf4ff; }
+        .cancel-replace-btn {
+            background: #fff;
+            color: #718096;
+            border: 1px solid #cbd5e0;
+            border-radius: 6px;
+            padding: 4px 12px;
+            margin-top: 6px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .cancel-replace-btn:hover { background: #f7fafc; }
+
+        /* ----- Validation: JotForm-style inline errors ----- */
+        .widget-error-banner {
+            display: none;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-left: 4px solid #dc2626;
+            color: #991b1b;
+            padding: 12px 14px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+        .widget-error-banner.visible { display: block; }
+        .student-block.has-error {
+            border-color: #fc8181;
+            box-shadow: 0 0 0 3px rgba(252, 129, 129, 0.18);
+        }
+        .field-error input,
+        .field-error select {
+            border-color: #fc8181 !important;
+            background: #fff5f5 !important;
+            box-shadow: 0 0 0 2px rgba(252, 129, 129, 0.18);
+        }
+        .upload-area.has-error {
+            border-color: #fc8181 !important;
+            background: #fff5f5 !important;
+        }
+        .field-error-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #c53030;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 14px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-top: 6px;
+            line-height: 1.4;
+        }
+        .field-error-badge::before {
+            content: "!";
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 14px;
+            height: 14px;
+            background: white;
+            color: #c53030;
+            border-radius: 50%;
+            font-size: 10px;
+            font-weight: 800;
+        }
     </style>
 </head>
 <body>
@@ -137,6 +222,8 @@
             <li class="warn">Do NOT refresh this page while filling the form — your current data and uploads will be lost.</li>
         </ul>
     </div>
+
+    <div id="widget-error-banner" class="widget-error-banner" role="alert"></div>
 
     <div id="student-list"></div>
 
@@ -298,7 +385,12 @@
 
         if (videoData[uid]?.videoId) {
             area.classList.remove('disabled');
-            area.innerHTML = `<div class="uploaded-badge">✓ Video Uploaded</div>`;
+            area.innerHTML = `
+                <div class="upload-row">
+                    <div class="uploaded-badge">✓ Video Uploaded</div>
+                    <button type="button" class="edit-upload-btn" onclick="startReplaceUpload('${uid}')">Replace video</button>
+                </div>
+            `;
             return;
         }
 
@@ -323,10 +415,101 @@
         }
     }
 
+    // ---------- Validation UI (JotForm-style inline errors) ----------
+    function clearFieldError(el) {
+        if (!el) return;
+        const wrapper = el.parentElement;
+        if (wrapper && wrapper.classList.contains('field-error')) {
+            wrapper.classList.remove('field-error');
+            const badge = wrapper.querySelector('.field-error-badge');
+            if (badge) badge.remove();
+        }
+    }
+    function clearUploadError(row) {
+        const area = row && row.querySelector('.upload-area');
+        if (!area) return;
+        area.classList.remove('has-error');
+        const badge = area.querySelector('.field-error-badge');
+        if (badge) badge.remove();
+    }
+    function clearAllErrors() {
+        const banner = document.getElementById('widget-error-banner');
+        if (banner) banner.classList.remove('visible');
+        document.querySelectorAll('.student-block.has-error').forEach(r => r.classList.remove('has-error'));
+        document.querySelectorAll('.field-error').forEach(el => el.classList.remove('field-error'));
+        document.querySelectorAll('.field-error-badge').forEach(el => el.remove());
+        document.querySelectorAll('.upload-area.has-error').forEach(el => el.classList.remove('has-error'));
+    }
+    function markFieldEmpty(el) {
+        if (!el || (el.value && el.value.trim())) return;
+        const wrapper = el.parentElement;
+        if (wrapper && !wrapper.classList.contains('field-error')) {
+            wrapper.classList.add('field-error');
+            const badge = document.createElement('div');
+            badge.className = 'field-error-badge';
+            badge.textContent = 'This field is required';
+            wrapper.appendChild(badge);
+        }
+    }
+    function markUploadEmpty(row) {
+        const area = row && row.querySelector('.upload-area');
+        if (!area) return;
+        if (area.classList.contains('has-error')) return;
+        area.classList.add('has-error');
+        const badge = document.createElement('div');
+        badge.className = 'field-error-badge';
+        badge.textContent = 'A video upload is required';
+        area.appendChild(badge);
+    }
+    function showInlineErrors(state) {
+        clearAllErrors();
+
+        const banner = document.getElementById('widget-error-banner');
+        if (banner) {
+            if (state.count === 0) {
+                banner.textContent = 'Please add at least one student before continuing.';
+            } else if (state.missing.length === 1) {
+                banner.textContent =
+                    `Student ${state.missing[0]} is incomplete. Please fill all required fields and upload a video before continuing.`;
+            } else {
+                banner.textContent =
+                    `Students ${state.missing.join(', ')} are incomplete. Please fill all required fields and upload a video for each before continuing.`;
+            }
+            banner.classList.add('visible');
+        }
+
+        const rows = document.querySelectorAll('#student-list .student-block');
+        state.missing.forEach((idx) => {
+            const row = rows[idx - 1];
+            if (!row) return;
+            row.classList.add('has-error');
+            markFieldEmpty(row.querySelector('.fName'));
+            markFieldEmpty(row.querySelector('.gender'));
+            markFieldEmpty(row.querySelector('.std'));
+            if (!videoData[row.id]?.videoId) markUploadEmpty(row);
+        });
+
+        const firstBad = state.missing[0] ? rows[state.missing[0] - 1] : null;
+        if (firstBad) {
+            try { firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+        }
+    }
+    // ---------- end validation UI ----------
+
     // Single change handler used by every input/select in a student block
     function onFieldChange(el) {
         const row = el.closest('.student-block');
-        if (row) renderUploadArea(row);
+        if (row) {
+            renderUploadArea(row);
+            // Real-time error clearing as user fixes things
+            clearFieldError(el);
+            // If this row no longer has any empty mandatory field AND has a video,
+            // drop its row-level error highlight too.
+            if (mandatoryFilled(row) && videoData[row.id]?.videoId) {
+                row.classList.remove('has-error');
+                clearUploadError(row);
+            }
+        }
         sync();
     }
 
@@ -475,7 +658,11 @@
                         videoName: videoTitle
                     };
                     const r = findRow(uid);
-                    if (r) renderUploadArea(r);
+                    if (r) {
+                        renderUploadArea(r);
+                        clearUploadError(r);
+                        if (mandatoryFilled(r)) r.classList.remove('has-error');
+                    }
                     sync();
                 },
                 onError: (err) => {
@@ -492,6 +679,146 @@
             renderUploadArea(row);
         }
     }
+
+    // ---------- Replace-video flow ----------
+    // Click "Replace video" button → swap the badge for a file picker that
+    // explicitly does NOT delete the existing video until the new one is
+    // successfully uploaded. This way the user can never lose their video
+    // to a failed re-upload (network drop, server error, mind-change, etc).
+
+    function startReplaceUpload(uid) {
+        const row = findRow(uid);
+        if (!row) return;
+        const area = row.querySelector('.upload-area');
+        if (!area) return;
+        area.id = "up-" + uid;
+        area.classList.remove('disabled');
+        area.innerHTML = `
+            <div class="uploaded-badge" style="opacity:0.6;">✓ Current video stays until the new one finishes</div>
+            <div style="margin-top:10px;">
+                <label>Choose new video<span>*</span></label>
+                <input type="file" accept="video/*" onchange="handleReplaceUpload('${uid}', this.files[0])">
+                <div class="upload-hint">Maximum file size: 1 GB. The existing video will be replaced only after the new upload succeeds.</div>
+                <button type="button" class="cancel-replace-btn" onclick="cancelReplaceUpload('${uid}')">Cancel</button>
+            </div>
+        `;
+    }
+
+    function cancelReplaceUpload(uid) {
+        const row = findRow(uid);
+        if (row) renderUploadArea(row);
+    }
+
+    // Same low-level upload as handleUpload, but with two key differences:
+    //   1. Keeps a snapshot of the OLD video info so we can either restore it
+    //      (on failure) or delete it from Bunny (on success).
+    //   2. Never modifies videoData[uid] until the new upload's onSuccess fires.
+    async function handleReplaceUpload(uid, file) {
+        const row = findRow(uid);
+        if (!row) return;
+        if (!file) return;
+
+        if (!mandatoryFilled(row)) {
+            alert("Please ensure First Name, Gender and Standard are filled before replacing the video.");
+            cancelReplaceUpload(uid);
+            return;
+        }
+        if (file.size > MAX_UPLOAD_BYTES) {
+            alert("This file is larger than 1 GB. Please choose a smaller video.");
+            cancelReplaceUpload(uid);
+            return;
+        }
+
+        // Snapshot of the current (about-to-be-replaced) video.
+        const oldVideo = { ...(videoData[uid] || {}) };
+
+        const fName = row.querySelector('.fName').value;
+        const sName = row.querySelector('.sName').value;
+        const stdVal = row.querySelector('.std').value;
+        const clean = (str) => {
+            if (!str) return "";
+            return str.toString().toLowerCase().trim()
+                .replace(/[^a-z0-9]/gi, '_')
+                .replace(/_+/g, '_');
+        };
+        const safeFName = clean(fName);
+        const safeSName = clean(sName);
+        const titleParts = ["story_telling", safeFName];
+        if (safeSName) titleParts.push(safeSName);
+        titleParts.push("std", stdVal);
+        const videoTitle = titleParts.join("_");
+
+        const area = row.querySelector('.upload-area');
+        area.id = "up-" + uid;
+        area.innerHTML = `
+            <div class="uploaded-badge" style="opacity:0.5;">✓ Current video (still active)</div>
+            <div style="margin-top:8px;">Uploading new video... <span id="p-${uid}">0%</span></div>
+        `;
+
+        const restoreOldUI = () => {
+            videoData[uid] = oldVideo;
+            const r = findRow(uid);
+            if (r) renderUploadArea(r);
+        };
+
+        try {
+            const res = await fetch(`${WORKER_URL}/sign`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: videoTitle })
+            });
+            if (!res.ok) throw new Error("Worker Connection Failed");
+            const creds = await res.json();
+
+            new tus.Upload(file, {
+                endpoint: "https://video.bunnycdn.com/tusupload",
+                headers: {
+                    AuthorizationSignature: creds.signature,
+                    AuthorizationExpire: creds.expirationTime,
+                    VideoId: creds.videoId,
+                    LibraryId: creds.libraryId
+                },
+                onProgress: (s, t) => {
+                    const pct = Math.round((s/t)*100);
+                    const p = document.getElementById(`p-${uid}`);
+                    if (p) p.innerText = pct + "%";
+                },
+                onSuccess: () => {
+                    // Step 1: switch the entry to point at the NEW video.
+                    videoData[uid] = {
+                        videoId: creds.videoId,
+                        libraryId: creds.libraryId,
+                        videoName: videoTitle
+                    };
+                    // Step 2: now that the new one is safely stored, delete the
+                    // old one from Bunny.net (fire-and-forget).
+                    if (oldVideo.videoId) {
+                        fetch(`${WORKER_URL}/delete`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ videoId: oldVideo.videoId })
+                        }).catch(() => {});
+                    }
+                    const r = findRow(uid);
+                    if (r) {
+                        renderUploadArea(r);
+                        clearUploadError(r);
+                        if (mandatoryFilled(r)) r.classList.remove('has-error');
+                    }
+                    sync();
+                },
+                onError: (err) => {
+                    alert("Replacement upload failed: " + err + "\n\nYour previous video is still in place.");
+                    restoreOldUI();
+                }
+            }).start();
+        } catch (e) {
+            alert("Upload error: " + (e && e.message ? e.message : "Please check your internet."));
+            console.error(e);
+            restoreOldUI();
+        }
+    }
+    // ---------- end replace-video flow ----------
 
     // Builds a Bunny.net iframe play URL when both libraryId and videoId are known.
     // This URL is directly viewable in a browser (click to watch) and also valid
@@ -771,10 +1098,10 @@
     });
 
     // Submit handler — fires on BOTH the multi-page Next button and the final
-    // Submit button. Per Jotform's official developer guidance, ALWAYS call
-    // sendSubmit and let the `valid` flag drive enforcement. We also alert the
-    // user when invalid so they understand what's wrong (Jotform's inline
-    // required-error UI is sometimes flaky for iframe widgets).
+    // Submit button. On invalid: render Jotform-style inline errors (red banner
+    // at the top of the widget + red borders + "This field is required" badges)
+    // and DO NOT call sendSubmit (best-effort hard block). On valid: clear all
+    // error UI and call sendSubmit so the page advances.
     JFCustomWidget.subscribe("submit", () => {
         const state = collectState();
         persistAll(state.payload);
@@ -782,29 +1109,17 @@
             state.allValid, state.count, state.missing);
 
         if (!state.allValid) {
-            let msg;
-            if (state.count === 0) {
-                msg = "Please add at least one student before continuing.";
-            } else if (state.missing.length === 1) {
-                msg = `Student ${state.missing[0]} is incomplete. Please fill First Name, Gender, Standard and upload a video for that student before continuing.`;
-            } else {
-                msg = `Students ${state.missing.join(', ')} are incomplete. Please fill First Name, Gender, Standard and upload a video for each before continuing.`;
-            }
-            alert(msg);
-
-            // Scroll the first incomplete row into view.
-            const rows = document.querySelectorAll('#student-list .student-block');
-            const firstBad = rows[(state.missing[0] || 1) - 1];
-            if (firstBad) {
-                try { firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
-            }
+            showInlineErrors(state);
+            // Best-effort: also tell Jotform we're invalid via sendData.
+            try { JFCustomWidget.sendData({ valid: false, value: state.prettyValue }); } catch (e) {}
+            // Hard-block attempt: do NOT call sendSubmit. (Jotform may still
+            // advance after its internal timeout — that's a known iframe-widget
+            // limitation we cannot fully fix from this side.)
+            return;
         }
 
-        // ALWAYS respond to Jotform's submit event with both flags set.
-        // sendData mirrors the validity in real time; sendSubmit responds to
-        // this specific submit/Next event. Both are needed per Jotform's docs.
-        JFCustomWidget.sendData({   valid: state.allValid, value: state.prettyValue });
-        JFCustomWidget.sendSubmit({ valid: state.allValid, value: state.prettyValue });
+        clearAllErrors();
+        JFCustomWidget.sendSubmit({ valid: true, value: state.prettyValue });
     });
 </script>
 
