@@ -584,19 +584,14 @@
 
     // Real-time sync — runs on every change.
     // - Storage layers get the raw JSON (compact, easy to parse on restore).
-    // - Jotform gets the pretty multi-line value (renders nicely in emails/Sheets).
-    //
-    // IMPORTANT: we always send valid:true here. The actual gating happens in the
-    // `submit` handler below, which is the authoritative validator. Reporting
-    // invalid via sendData was causing Jotform to skip firing the submit event
-    // unpredictably (race-y caching), which produced the "second-attempt-works"
-    // bug. By always reporting valid here, the submit event reliably fires on
-    // every Next click, and our handler controls whether the page advances.
+    // - Jotform gets the pretty multi-line value (renders nicely in emails/Sheets)
+    //   along with the real `valid` flag, which Jotform uses for native required-
+    //   field enforcement (since the widget is registered with "Required By Default").
     function sync() {
         if (!isReady) return;
-        const { payload, prettyValue } = collectState();
+        const { payload, prettyValue, allValid } = collectState();
         persistAll(payload);
-        JFCustomWidget.sendData({ valid: true, value: prettyValue });
+        JFCustomWidget.sendData({ valid: allValid, value: prettyValue });
     }
 
     // Returns true if a saved entry has at least one piece of real user data.
@@ -708,46 +703,21 @@
         }
     });
 
-    // Fired on Next button (multi-page) AND on final form submit.
-    //
-    // HARD-BLOCK on invalid: when any row is incomplete (missing required field
-    // or missing uploaded video), we deliberately do NOT call sendSubmit.
-    // Jotform's submit handler waits for sendSubmit before advancing, so the
-    // user stays on this page. We show a clear alert telling them what to fix.
-    // Authoritative validator. Jotform's submit event waits for sendSubmit
-    // before letting the user advance. We *only* call sendSubmit when state is
-    // valid. When invalid: alert + scroll + return without sendSubmit, which
-    // cleanly hard-blocks the page transition.
+    // Submit handler — fires on BOTH the multi-page Next button and the final
+    // Submit button. We always respond with sendSubmit; the `valid` flag tells
+    // Jotform whether to advance. Jotform's native required-field machinery
+    // (Required toggle ON in the form builder) shows its own inline error and
+    // blocks navigation/submission when valid:false is reported.
     JFCustomWidget.subscribe("submit", () => {
         const state = collectState();
         persistAll(state.payload);
         console.log('[StudentWidget] submit — valid=%s count=%s missing=%o',
             state.allValid, state.count, state.missing);
 
-        if (!state.allValid) {
-            let msg;
-            if (state.count === 0) {
-                msg = "Please add at least one student before continuing.";
-            } else if (state.missing.length === 1) {
-                msg = `Student ${state.missing[0]} is incomplete. Please fill First Name, Gender, Standard and upload a video for that student before continuing.`;
-            } else {
-                msg = `Students ${state.missing.join(', ')} are incomplete. Please fill First Name, Gender, Standard and upload a video for each before continuing.`;
-            }
-            alert(msg);
-
-            // Scroll the first incomplete row into view so the user sees what to fix.
-            const rows = document.querySelectorAll('#student-list .student-block');
-            const firstBad = rows[(state.missing[0] || 1) - 1];
-            if (firstBad) {
-                try { firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
-            }
-
-            // Hard-block: do NOT call sendSubmit. Jotform stays on this page.
-            return;
-        }
-
-        // All good — proceed.
-        JFCustomWidget.sendSubmit({ valid: true, value: state.prettyValue });
+        JFCustomWidget.sendSubmit({
+            valid: state.allValid,
+            value: state.prettyValue
+        });
     });
 </script>
 
