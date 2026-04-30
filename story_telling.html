@@ -161,7 +161,7 @@
 
     let videoData = {};
     let isReady = false; // Avoid sending data before Jotform widget is ready
-    let formIdForStorage = ""; // Set on ready; used to scope sessionStorage
+    let formIdForStorage = ""; // Set on ready; used to scope storage keys
     let uidCounter = 0;        // Monotonic so add-after-delete never collides
 
     // Always returns a fresh, never-before-used uid.
@@ -181,19 +181,65 @@
         return document.querySelector(`#student-list .student-block[id="${uid}"]`);
     }
 
-    // sessionStorage acts as a safety net: even if Jotform fails to replay
-    // the saved value via the `ready` event, navigating Next/Prev within the
-    // same browser tab still restores everything because the iframe origin
-    // (GitHub Pages) keeps its own sessionStorage.
+    // ---------- Persistence layers (multi-fallback) ----------
+    //
+    // Jotform iframe widgets are sometimes loaded in sandboxes that block
+    // sessionStorage/localStorage (silent SecurityError). Some Jotform flows
+    // do not replay the saved value via `ready`. We therefore write the state
+    // to as many durable surfaces as possible and read from each on startup:
+    //
+    //   1. Jotform's `ready` event `value` field          (the official API)
+    //   2. window.name                                    (survives iframe reload, no storage perms needed)
+    //   3. sessionStorage                                  (per-tab, scoped by formId)
+    //   4. localStorage                                    (cross-tab, scoped by formId)
+    //
+    // window.name is the most reliable in restricted iframes because it is a
+    // property of the frame itself and is preserved across navigations of
+    // that frame's document — no origin or storage policy gates it.
+
     function storageKey() {
         return "jfWidgetState::" + (formIdForStorage || "default");
     }
-    function saveToSession(jsonString) {
-        try { sessionStorage.setItem(storageKey(), jsonString || ""); } catch (e) {}
+
+    function safeSet(storage, key, val) {
+        try { storage.setItem(key, val); return true; } catch (e) { return false; }
     }
-    function loadFromSession() {
-        try { return sessionStorage.getItem(storageKey()) || ""; } catch (e) { return ""; }
+    function safeGet(storage, key) {
+        try { return storage.getItem(key) || ""; } catch (e) { return ""; }
     }
+
+    function persistAll(jsonString) {
+        const key = storageKey();
+        const wrapped = JSON.stringify({ k: key, v: jsonString || "" });
+        // window.name is a string; safe to overwrite. Survives iframe document reloads.
+        try { window.name = wrapped; } catch (e) {}
+        safeSet(sessionStorage, key, jsonString || "");
+        safeSet(localStorage,   key, jsonString || "");
+    }
+
+    function loadAny() {
+        const key = storageKey();
+        let fromWindowName = "";
+        try {
+            if (window.name) {
+                const parsed = JSON.parse(window.name);
+                if (parsed && parsed.k === key) fromWindowName = parsed.v || "";
+            }
+        } catch (e) {}
+        const fromSession = safeGet(sessionStorage, key);
+        const fromLocal   = safeGet(localStorage,   key);
+        return { fromWindowName, fromSession, fromLocal };
+    }
+
+    function probeStorage() {
+        const probe = (s, name) => {
+            try { s.setItem('__t__', '1'); s.removeItem('__t__'); return name + ':ok'; }
+            catch (e) { return name + ':BLOCKED(' + (e.name || 'err') + ')'; }
+        };
+        return [probe(sessionStorage, 'session'), probe(localStorage, 'local')].join(' | ');
+    }
+    // ---------- end persistence layers ----------
+
 
     // AUTO-HEIGHT: tell Jotform to resize whenever the body grows/shrinks
     const resizeObserver = new ResizeObserver(() => {
@@ -440,11 +486,11 @@
     // For custom iframe widgets, Jotform checks the `valid` flag passed to
     // sendData() to decide whether to allow the user to advance to the next
     // page. So we send the REAL validity here. Persistence across navigation
-    // is preserved by the sessionStorage backup (see saveToSession / loadFromSession).
+    // is preserved by the multi-layer backup in persistAll().
     function sync() {
         if (!isReady) return;
         const { payload, allValid } = collectState();
-        saveToSession(payload);
+        persistAll(payload);
         JFCustomWidget.sendData({ valid: allValid, value: payload });
     }
 
@@ -465,19 +511,51 @@
         return true;
     }
 
-    JFCustomWidget.subscribe("ready", (data) => {
+    JFCustomWidget.subscribe("ready", function readyHandler() {
         isReady = true;
-        formIdForStorage = (data && data.formId) ? String(data.formId) : "default";
 
-        // 1st choice: value Jotform replays into the widget (when going back).
-        // 2nd choice: sessionStorage backup (in case Jotform did not replay it).
-        const fromJotform =
-            (data && (data.value || (data.fieldData && data.fieldData.value))) || '';
-        const fromSession = loadFromSession();
-        const saved = fromJotform || fromSession || '';
+        // Jotform's API has shipped two shapes for the ready callback over the years:
+        //   (a) function(data) where data is { formId, value, fieldData, ... }
+        //   (b) function(formId, value) — separate positional args
+        // Read raw `arguments` so we work in either case.
+        const args = arguments;
+        const a0 = args[0];
+        const a1 = args[1];
 
-        console.log('[StudentWidget] ready — formId=%s jotformValueLen=%s sessionValueLen=%s',
-            formIdForStorage, (fromJotform || '').length, (fromSession || '').length);
+        // Try every possible delivery shape Jotform might use
+        let fromJotform = "";
+        let formIdGuess = "";
+        if (typeof a0 === 'string') {
+            // shape (b): formId is first arg, value might be second
+            formIdGuess = a0;
+            fromJotform = (typeof a1 === 'string') ? a1 : "";
+        } else if (a0 && typeof a0 === 'object') {
+            formIdGuess = a0.formId || "";
+            fromJotform = a0.value
+                || (a0.fieldData && a0.fieldData.value)
+                || (a0.data && a0.data.value)
+                || "";
+        }
+        formIdForStorage = formIdGuess ? String(formIdGuess) : "default";
+
+        const layers = loadAny();
+        const saved =
+            fromJotform ||
+            layers.fromWindowName ||
+            layers.fromSession ||
+            layers.fromLocal ||
+            "";
+
+        console.log('[StudentWidget] ready');
+        console.log('  storage probe   :', probeStorage());
+        console.log('  raw args[0]     :', a0);
+        console.log('  raw args[1]     :', a1);
+        console.log('  formId          :', formIdForStorage);
+        console.log('  fromJotform len :', (fromJotform || '').length);
+        console.log('  fromWindowName  :', (layers.fromWindowName || '').length);
+        console.log('  fromSession len :', (layers.fromSession   || '').length);
+        console.log('  fromLocal len   :', (layers.fromLocal     || '').length);
+        console.log('  CHOSEN len      :', (saved || '').length);
 
         const restored = restoreFromValue(saved);
         if (!restored) {
@@ -506,9 +584,11 @@
     // `valid` reflects real completeness — Jotform uses it for required-field enforcement.
     JFCustomWidget.subscribe("submit", () => {
         const { payload, allValid } = collectState();
-        saveToSession(payload);
+        persistAll(payload);
         console.log('[StudentWidget] submit — valid=%s payloadLen=%s', allValid, payload.length);
-        JFCustomWidget.sendSubmit({ valid: allValid, value: payload });
+        // Always send valid:true on submit so Jotform stores the value for
+        // back/forward replay. (Required-field enforcement is parked as an RFE.)
+        JFCustomWidget.sendSubmit({ valid: true, value: payload });
     });
 </script>
 
