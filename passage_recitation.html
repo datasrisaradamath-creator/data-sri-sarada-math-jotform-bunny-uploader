@@ -161,6 +161,39 @@
 
     let videoData = {};
     let isReady = false; // Avoid sending data before Jotform widget is ready
+    let formIdForStorage = ""; // Set on ready; used to scope sessionStorage
+    let uidCounter = 0;        // Monotonic so add-after-delete never collides
+
+    // Always returns a fresh, never-before-used uid.
+    function makeUid(preferred) {
+        if (preferred && !document.getElementById(preferred)) return preferred;
+        let candidate;
+        do {
+            uidCounter += 1;
+            candidate = "u" + uidCounter;
+        } while (document.getElementById(candidate));
+        return candidate;
+    }
+
+    // Scoped lookup so we cannot accidentally match the hidden MASTER_TEMPLATE
+    // or anything outside the live student list.
+    function findRow(uid) {
+        return document.querySelector(`#student-list .student-block[id="${uid}"]`);
+    }
+
+    // sessionStorage acts as a safety net: even if Jotform fails to replay
+    // the saved value via the `ready` event, navigating Next/Prev within the
+    // same browser tab still restores everything because the iframe origin
+    // (GitHub Pages) keeps its own sessionStorage.
+    function storageKey() {
+        return "jfWidgetState::" + (formIdForStorage || "default");
+    }
+    function saveToSession(jsonString) {
+        try { sessionStorage.setItem(storageKey(), jsonString || ""); } catch (e) {}
+    }
+    function loadFromSession() {
+        try { return sessionStorage.getItem(storageKey()) || ""; } catch (e) { return ""; }
+    }
 
     // AUTO-HEIGHT: tell Jotform to resize whenever the body grows/shrinks
     const resizeObserver = new ResizeObserver(() => {
@@ -231,10 +264,22 @@
 
     function addNewStudent(savedData = null) {
         const list = document.getElementById('student-list');
-        const uid = savedData?.uid || "u" + Date.now() + Math.floor(Math.random() * 1000);
+        const uid = makeUid(savedData?.uid);
 
         const block = document.getElementById('MASTER_TEMPLATE').cloneNode(true);
         block.id = uid;
+
+        // Defensive: scrub any stale state copied from the template
+        block.querySelectorAll('input, select').forEach((el) => {
+            if (el.tagName === 'SELECT') el.selectedIndex = 0;
+            else el.value = "";
+        });
+        const freshArea = block.querySelector('.upload-area');
+        freshArea.removeAttribute('id');
+        freshArea.classList.remove('disabled');
+        freshArea.innerHTML = "";
+        const freshDelCol = block.querySelector('.del-col');
+        if (freshDelCol) freshDelCol.innerHTML = "";
 
         if (savedData) {
             block.querySelector('.fName').value = savedData.firstName || "";
@@ -264,14 +309,15 @@
             }).catch(() => {});
         }
 
-        document.getElementById(uid).remove();
+        const row = findRow(uid);
+        if (row) row.remove();
         delete videoData[uid];
         refreshIndices();
         sync();
     }
 
     async function handleUpload(uid, file) {
-        const row = document.getElementById(uid);
+        const row = findRow(uid);
         if (!row) return;
 
         const fileInput = row.querySelector('input[type="file"]');
@@ -309,8 +355,8 @@
 
         const safeFName = clean(fName);
         const safeSName = clean(sName) || "no_surname";
-        const passage_recitation = "passage_recitation";
-        const videoTitle = `${passage_recitation}_${safeFName}_${safeSName}_std_${stdVal}`;
+        const story_telling = "story_telling";
+        const videoTitle = `${story_telling}_${safeFName}_${safeSName}_std_${stdVal}`;
 
         const area = document.getElementById("up-" + uid);
         videoData[uid] = { ...(videoData[uid] || {}), uploading: true };
@@ -342,14 +388,14 @@
                 },
                 onSuccess: () => {
                     videoData[uid] = { videoId: creds.videoId };
-                    const r = document.getElementById(uid);
+                    const r = findRow(uid);
                     if (r) renderUploadArea(r);
                     sync();
                 },
                 onError: (err) => {
                     alert("Upload failed: " + err);
                     delete videoData[uid];
-                    const r = document.getElementById(uid);
+                    const r = findRow(uid);
                     if (r) renderUploadArea(r);
                 }
             }).start();
@@ -361,15 +407,10 @@
         }
     }
 
-    // Builds the value sent back to Jotform.
-    // - Submission value (sendData) only fires when EVERY row is fully valid.
-    // - Persistence value (sendSubmit data) is always full state so back/forward restores correctly.
-    function sync() {
-        if (!isReady) return;
-
+    // Reads the current form state and returns { payload, allValid }.
+    function collectState() {
         const out = [];
         let allValid = true;
-
         document.querySelectorAll('.student-block').forEach((row) => {
             const rowId = row.id;
             const fName = row.querySelector('.fName').value;
@@ -389,15 +430,22 @@
                 videoId: vId || null
             });
         });
+        return {
+            payload: JSON.stringify(out),
+            allValid: allValid && out.length > 0
+        };
+    }
 
-        // Always persist the full state so back/forward navigation can restore it.
-        // When the form is incomplete we still send the JSON so Jotform stores it,
-        // but we mark it invalid so the form won't submit.
-        const payload = JSON.stringify(out);
-        JFCustomWidget.sendData({
-            valid: allValid && out.length > 0,
-            value: payload
-        });
+    // Real-time sync — runs on every change.
+    // For custom iframe widgets, Jotform checks the `valid` flag passed to
+    // sendData() to decide whether to allow the user to advance to the next
+    // page. So we send the REAL validity here. Persistence across navigation
+    // is preserved by the sessionStorage backup (see saveToSession / loadFromSession).
+    function sync() {
+        if (!isReady) return;
+        const { payload, allValid } = collectState();
+        saveToSession(payload);
+        JFCustomWidget.sendData({ valid: allValid, value: payload });
     }
 
     // Restore widget state from a previously saved JSON payload.
@@ -419,10 +467,17 @@
 
     JFCustomWidget.subscribe("ready", (data) => {
         isReady = true;
+        formIdForStorage = (data && data.formId) ? String(data.formId) : "default";
 
-        // Jotform passes the previously saved value here when navigating
-        // back/forward or returning to a draft. Try several known shapes.
-        const saved = (data && (data.value || (data.fieldData && data.fieldData.value))) || '';
+        // 1st choice: value Jotform replays into the widget (when going back).
+        // 2nd choice: sessionStorage backup (in case Jotform did not replay it).
+        const fromJotform =
+            (data && (data.value || (data.fieldData && data.fieldData.value))) || '';
+        const fromSession = loadFromSession();
+        const saved = fromJotform || fromSession || '';
+
+        console.log('[StudentWidget] ready — formId=%s jotformValueLen=%s sessionValueLen=%s',
+            formIdForStorage, (fromJotform || '').length, (fromSession || '').length);
 
         const restored = restoreFromValue(saved);
         if (!restored) {
@@ -436,6 +491,7 @@
     // handle it defensively so persistence works in more flows.
     JFCustomWidget.subscribe("populate", (data) => {
         const saved = (data && (data.value || (data.fieldData && data.fieldData.value))) || '';
+        console.log('[StudentWidget] populate — valueLen=%s', (saved || '').length);
         if (saved) {
             const restored = restoreFromValue(saved);
             if (restored) {
@@ -445,32 +501,14 @@
         }
     });
 
-    // Make sure Jotform always has the latest value when the form is being submitted.
+    // Fired on Next button (multi-page) AND on final form submit.
+    // We always send the latest value so Jotform persists it.
+    // `valid` reflects real completeness — Jotform uses it for required-field enforcement.
     JFCustomWidget.subscribe("submit", () => {
-        const out = [];
-        let allValid = true;
-        document.querySelectorAll('.student-block').forEach((row) => {
-            const rowId = row.id;
-            const fName = row.querySelector('.fName').value;
-            const gender = row.querySelector('.gender').value;
-            const std = row.querySelector('.std').value;
-            const vId = videoData[rowId]?.videoId;
-            if (!fName || !gender || !std || !vId) allValid = false;
-            out.push({
-                uid: rowId,
-                firstName: fName,
-                middleName: row.querySelector('.mName').value,
-                surname: row.querySelector('.sName').value,
-                gender: gender,
-                standard: std,
-                division: row.querySelector('.div').value,
-                videoId: vId || null
-            });
-        });
-        JFCustomWidget.sendSubmit({
-            valid: allValid && out.length > 0,
-            value: JSON.stringify(out)
-        });
+        const { payload, allValid } = collectState();
+        saveToSession(payload);
+        console.log('[StudentWidget] submit — valid=%s payloadLen=%s', allValid, payload.length);
+        JFCustomWidget.sendSubmit({ valid: allValid, value: payload });
     });
 </script>
 
