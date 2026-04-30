@@ -499,9 +499,9 @@
         return `https://iframe.mediadelivery.net/play/${libraryId}/${videoId}`;
     }
 
-    // Returns a human-readable, multi-line representation of all entries that
-    // looks great in auto-reply emails and Google Sheets. Each student gets
-    // its own block with name, gender, class, video name, video id and a play URL.
+    // Returns a human-readable, multi-line representation of all entries.
+    // Designed to look clean in auto-reply emails and Google Sheets cells.
+    // (Video ID is intentionally omitted — Video Name + Video URL is enough.)
     function formatPretty(entries) {
         if (!entries.length) return "(no students submitted)";
 
@@ -521,7 +521,6 @@
             lines.push(`  Gender: ${s.gender || '(not provided)'}`);
             lines.push(`  Class: ${classDisplay}`);
             lines.push(`  Video Name: ${s.videoName || '(not uploaded)'}`);
-            lines.push(`  Video ID: ${s.videoId || '(not uploaded)'}`);
             if (videoUrl) lines.push(`  Video URL: ${videoUrl}`);
             lines.push("");
         });
@@ -529,9 +528,9 @@
         return lines.join("\n").trimEnd();
     }
 
-    // Marker used to embed the raw JSON at the end of the value string.
-    // Restoration code looks for this marker so back/forward navigation still works
-    // even when Jotform replays only the formatted value (not our own storage layers).
+    // Legacy marker — older saved submissions/drafts had raw JSON appended after this
+    // string. We no longer emit it (keeps emails clean) but we still recognize it
+    // when restoring older saved values.
     const RAW_DATA_MARKER = "--- RAW DATA (do not edit) ---";
 
     // Reads the current form state and returns:
@@ -571,8 +570,8 @@
             });
         });
 
-        const payload = JSON.stringify(out);
-        const prettyValue = formatPretty(out) + "\n\n" + RAW_DATA_MARKER + "\n" + payload;
+        const payload = JSON.stringify(out);          // raw JSON for our storage layers
+        const prettyValue = formatPretty(out);          // clean, human-readable text for Jotform
 
         return {
             payload,
@@ -585,13 +584,19 @@
 
     // Real-time sync — runs on every change.
     // - Storage layers get the raw JSON (compact, easy to parse on restore).
-    // - Jotform gets the pretty multi-line value (renders nicely in emails/Sheets,
-    //   and still contains the raw JSON at the end for our own re-parse).
+    // - Jotform gets the pretty multi-line value (renders nicely in emails/Sheets).
+    //
+    // IMPORTANT: we always send valid:true here. The actual gating happens in the
+    // `submit` handler below, which is the authoritative validator. Reporting
+    // invalid via sendData was causing Jotform to skip firing the submit event
+    // unpredictably (race-y caching), which produced the "second-attempt-works"
+    // bug. By always reporting valid here, the submit event reliably fires on
+    // every Next click, and our handler controls whether the page advances.
     function sync() {
         if (!isReady) return;
-        const { payload, prettyValue, allValid } = collectState();
+        const { payload, prettyValue } = collectState();
         persistAll(payload);
-        JFCustomWidget.sendData({ valid: allValid, value: prettyValue });
+        JFCustomWidget.sendData({ valid: true, value: prettyValue });
     }
 
     // Returns true if a saved entry has at least one piece of real user data.
@@ -709,6 +714,10 @@
     // or missing uploaded video), we deliberately do NOT call sendSubmit.
     // Jotform's submit handler waits for sendSubmit before advancing, so the
     // user stays on this page. We show a clear alert telling them what to fix.
+    // Authoritative validator. Jotform's submit event waits for sendSubmit
+    // before letting the user advance. We *only* call sendSubmit when state is
+    // valid. When invalid: alert + scroll + return without sendSubmit, which
+    // cleanly hard-blocks the page transition.
     JFCustomWidget.subscribe("submit", () => {
         const state = collectState();
         persistAll(state.payload);
@@ -733,16 +742,11 @@
                 try { firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
             }
 
-            // Tell Jotform we're invalid via BOTH channels so it stays on this page:
-            // - sendData mirrors validity for the real-time channel.
-            // - sendSubmit({ valid:false }) is the documented way to block Next
-            //   for a Required widget.
-            try { JFCustomWidget.sendData({ valid: false, value: state.prettyValue }); } catch (e) {}
-            try { JFCustomWidget.sendSubmit({ valid: false, value: state.prettyValue }); } catch (e) {}
+            // Hard-block: do NOT call sendSubmit. Jotform stays on this page.
             return;
         }
 
-        JFCustomWidget.sendData({ valid: true, value: state.prettyValue });
+        // All good — proceed.
         JFCustomWidget.sendSubmit({ valid: true, value: state.prettyValue });
     });
 </script>
