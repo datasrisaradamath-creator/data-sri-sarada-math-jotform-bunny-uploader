@@ -274,6 +274,7 @@
     let videoData = {};
     let isReady = false; // Avoid sending data before Jotform widget is ready
     let formIdForStorage = ""; // Set on ready; used to scope storage keys
+    let instanceId = "";       // Unique per widget iframe instance (for storage key)
     let uidCounter = 0;        // Monotonic so add-after-delete never collides
 
     // Always returns a fresh, never-before-used uid.
@@ -294,8 +295,33 @@
     }
 
     // ---------- Persistence layers (multi-fallback) ----------
+    //
+    // Important: a single Jotform form can have MULTIPLE instances of this
+    // widget (Story Telling on one page, Passage Recitation on another, etc).
+    // sessionStorage/localStorage are origin-scoped, so instances share them.
+    // To avoid one instance's data leaking into another, we include a unique
+    // `instanceId` in the storage key. The id is cached in this iframe's
+    // `window.name` so it survives reloads/back-forward navigation but is
+    // separate per iframe (each Jotform widget instance has its own iframe).
     function storageKey() {
-        return "jfWidgetState::" + (formIdForStorage || "default");
+        return "jfWidgetState::"
+            + (formIdForStorage || "default")
+            + "::" + (instanceId || "default");
+    }
+
+    // Read existing instanceId from window.name if present, else generate one.
+    // Run this once on bootstrap before any persist/load call.
+    function initInstanceId() {
+        try {
+            if (window.name) {
+                const parsed = JSON.parse(window.name);
+                if (parsed && parsed.instanceId) {
+                    instanceId = String(parsed.instanceId);
+                    return;
+                }
+            }
+        } catch (e) {}
+        instanceId = "i" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     }
 
     function safeSet(storage, key, val) {
@@ -307,7 +333,11 @@
 
     function persistAll(jsonString) {
         const key = storageKey();
-        const wrapped = JSON.stringify({ k: key, v: jsonString || "" });
+        const wrapped = JSON.stringify({
+            instanceId: instanceId,
+            k: key,
+            v: jsonString || ""
+        });
         try { window.name = wrapped; } catch (e) {}
         safeSet(sessionStorage, key, jsonString || "");
         safeSet(localStorage,   key, jsonString || "");
@@ -1078,6 +1108,7 @@
 
     JFCustomWidget.subscribe("ready", function readyHandler() {
         isReady = true;
+        initInstanceId(); // must run before any persistAll()/loadAny() call
 
         const args = arguments;
         const a0 = args[0];
@@ -1108,6 +1139,7 @@
         console.log('[StudentWidget] ready');
         console.log('  storage probe   :', probeStorage());
         console.log('  formId          :', formIdForStorage);
+        console.log('  instanceId      :', instanceId);
         console.log('  fromJotform len :', (fromJotform || '').length);
         console.log('  fromWindowName  :', (layers.fromWindowName || '').length);
         console.log('  fromSession len :', (layers.fromSession   || '').length);
