@@ -1135,14 +1135,11 @@
     });
 
     // Submit handler — fires on BOTH the multi-page Next button and the final
-    // Submit button. We use the most aggressive blocking strategy possible
-    // from inside an iframe widget:
-    //   1. Render JotForm-style inline error UI (red banner + borders + badges).
-    //   2. Show a synchronous alert() popup so the user is forced to ACK.
-    //   3. Tell JotForm via every channel (sendData + sendSubmit) we're invalid.
-    //   4. Throw an exception synchronously to abort JotForm's submit pipeline.
-    //   5. Schedule an async throw on the next tick to escape any try/catch
-    //      JotForm may wrap our handler in.
+    // Submit button. Navigation blocking is handled natively by JotForm Form
+    // Conditions on the visible "_widgetCheck" field. Our job here is just to:
+    //   - render the inline red error UI inside the widget (so the user knows
+    //     which specific student is incomplete), and
+    //   - send the latest value/validity to JotForm so the conditions can act.
     JFCustomWidget.subscribe("submit", () => {
         const state = collectState();
         persistAll(state.payload);
@@ -1150,38 +1147,15 @@
             state.allValid, state.count, state.missing);
 
         if (!state.allValid) {
-            // (1) inline UI
             showInlineErrors(state);
-
-            // (2) build & show alert (synchronous; blocks until user clicks OK)
-            let msg;
-            if (state.count === 0) {
-                msg = "Cannot continue.\n\nPlease add at least one student before proceeding.";
-            } else if (state.missing.length === 1) {
-                msg = `Cannot continue.\n\nStudent ${state.missing[0]} is incomplete. Please fill First Name, Gender, Standard and upload a video before proceeding.`;
-            } else {
-                msg = `Cannot continue.\n\nStudents ${state.missing.join(', ')} are incomplete. Please fill all required fields and upload a video for each before proceeding.`;
-            }
-            alert(msg);
-
-            // (3) inform JotForm via both channels
-            try { JFCustomWidget.sendData({ valid: false, value: state.prettyValue }); } catch (e) {}
-            try { JFCustomWidget.sendSubmit({ valid: false, value: state.prettyValue }); } catch (e) {}
-
-            // (5) async throw — runs after our handler returns, escapes any
-            //     try/catch JotForm may have around the handler call.
-            setTimeout(() => {
-                throw new Error("StudentWidget: validation failed (async block)");
-            }, 0);
-
-            // (4) sync throw — aborts the rest of JotForm's submit pipeline now.
-            throw new Error("StudentWidget: validation failed — " +
-                state.missing.length + " incomplete row" +
-                (state.missing.length === 1 ? "" : "s"));
+        } else {
+            clearAllErrors();
         }
 
-        clearAllErrors();
-        JFCustomWidget.sendSubmit({ valid: true, value: state.prettyValue });
+        JFCustomWidget.sendSubmit({
+            valid: state.allValid,
+            value: state.prettyValue
+        });
     });
 </script>
 
