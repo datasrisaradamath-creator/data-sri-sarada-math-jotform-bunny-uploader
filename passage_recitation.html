@@ -223,8 +223,8 @@
             <li>Click <b>+ Add Student</b> to add a new student entry. You can add up to <b>10 students</b>.</li>
             <li>Click <b>Delete Student</b> to remove a student you have added.</li>
             <li>Fill in <b>First Name</b>, <b>Gender</b> and <b>Standard</b> <i>before</i> uploading the video — upload will stay disabled until these are filled.</li>
-            <li>You <b>must upload a video</b> for every student before continuing to the next page.</li>
-            <li>Maximum upload size is <b>1 GB</b> per video.</li>
+            <li>Uploading a video is <b>optional</b> — you can submit without one.</li>
+            <li>Maximum upload size is <b>25 MB</b> per video.</li>
             <li>To change a video after uploading, click <b>Replace video</b> next to the green badge. Your previous video stays in place until the new upload succeeds.</li>
         </ul>
     </div>
@@ -250,7 +250,7 @@
         <div class="meta-row">
             <div><label>Gender<span>*</span></label>
                 <select class="gender" onchange="onFieldChange(this)">
-                    <option value="">Select<option value="Female">Female</option>
+                    <option value="">Select<option value="Girl">Girl</option>
                 </select>
             </div>
             <div><label>Standard<span>*</span></label>
@@ -267,7 +267,7 @@
 
 <script>
     const WORKER_URL = "https://bunny-uploader.datasrisaradamath.workers.dev";
-    const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024; // 1 GB
+    const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB
     const MAX_STUDENTS = 10; // Hard cap on number of student entries
     const TRASH_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
 
@@ -439,7 +439,7 @@
             area.innerHTML = `
                 <label>Upload Video<span>*</span></label>
                 <input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">
-                <div class="upload-hint">Maximum file size: 1 GB.</div>
+                <div class="upload-hint">Optional. Maximum file size: 25 MB.</div>
             `;
         } else {
             area.classList.add('disabled');
@@ -533,10 +533,10 @@
                 banner.textContent = 'Please add at least one student before continuing.';
             } else if (state.missing.length === 1) {
                 banner.textContent =
-                    `Student ${state.missing[0]} is incomplete. Please fill all required fields and upload a video before continuing.`;
+                    `Student ${state.missing[0]} is incomplete. Please fill First Name, Gender and Standard before continuing.`;
             } else {
                 banner.textContent =
-                    `Students ${state.missing.join(', ')} are incomplete. Please fill all required fields and upload a video for each before continuing.`;
+                    `Students ${state.missing.join(', ')} are incomplete. Please fill First Name, Gender and Standard for each before continuing.`;
             }
             banner.classList.add('visible');
         }
@@ -549,7 +549,6 @@
             markFieldEmpty(row.querySelector('.fName'));
             markFieldEmpty(row.querySelector('.gender'));
             markFieldEmpty(row.querySelector('.std'));
-            if (!videoData[row.id]?.videoId) markUploadEmpty(row);
         });
 
         const firstBad = state.missing[0] ? rows[state.missing[0] - 1] : null;
@@ -662,7 +661,7 @@
         if (!file) return;
 
         if (file.size > MAX_UPLOAD_BYTES) {
-            alert("This file is larger than 1 GB. Please upload a smaller video.");
+            alert("This file is larger than 25 MB. Please upload a smaller video.");
             if (fileInput) fileInput.value = "";
             renderUploadArea(row);
             return;
@@ -764,7 +763,7 @@
             <div style="margin-top:10px;">
                 <label>Choose new video<span>*</span></label>
                 <input type="file" accept="video/*" onchange="handleReplaceUpload('${uid}', this.files[0])">
-                <div class="upload-hint">Maximum file size: 1 GB. The existing video will be replaced only after the new upload succeeds.</div>
+                <div class="upload-hint">Maximum file size: 25 MB. The existing video will be replaced only after the new upload succeeds.</div>
                 <button type="button" class="cancel-replace-btn" onclick="cancelReplaceUpload('${uid}')">Cancel</button>
             </div>
         `;
@@ -790,7 +789,7 @@
             return;
         }
         if (file.size > MAX_UPLOAD_BYTES) {
-            alert("This file is larger than 1 GB. Please choose a smaller video.");
+            alert("This file is larger than 25 MB. Please choose a smaller video.");
             cancelReplaceUpload(uid);
             return;
         }
@@ -948,7 +947,8 @@
             const std = row.querySelector('.std').value;
             const vData = videoData[rowId] || {};
             const vId = vData.videoId;
-            if (!fName || !gender || !std || !vId) {
+            // Video is OPTIONAL — only the three text/select fields are required.
+            if (!fName || !gender || !std) {
                 allValid = false;
                 missing.push(idx + 1);
             }
