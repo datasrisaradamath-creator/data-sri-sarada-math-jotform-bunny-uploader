@@ -130,13 +130,19 @@
             width: 280px;
             max-width: 100%;
         }
-        .video-thumbnail iframe {
+        .video-thumbnail img {
             width: 100%;
             height: 158px;
+            object-fit: cover;
             border: 1px solid #d1d5db;
             border-radius: 8px;
-            background: #000;
+            background: #f3f4f6;
             display: block;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .video-thumbnail img.loaded {
+            opacity: 1;
         }
         .thumbnail-status {
             font-size: 12px;
@@ -305,6 +311,9 @@
     const WORKER_URL = "https://bunny-uploader.datasrisaradamath.workers.dev";
     const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB
     const MAX_STUDENTS = 10; // Hard cap on number of student entries
+    // Bunny.net pull-zone host (the "vz-..." subdomain visible on your video URLs).
+    // Used to build the direct thumbnail URL: https://<host>.b-cdn.net/<videoId>/thumbnail.jpg
+    const BUNNY_PULL_ZONE_HOST = "vz-c8a5643d-6bd";
     const TRASH_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
 
     let videoData = {};
@@ -458,8 +467,8 @@
 
         if (videoData[uid]?.videoId) {
             const v = videoData[uid];
-            const previewUrl = (v.libraryId && v.videoId)
-                ? `https://iframe.mediadelivery.net/embed/${v.libraryId}/${v.videoId}?autoplay=false&muted=true`
+            const thumbnailUrl = (BUNNY_PULL_ZONE_HOST && v.videoId)
+                ? `https://${BUNNY_PULL_ZONE_HOST}.b-cdn.net/${v.videoId}/thumbnail.jpg`
                 : '';
             area.classList.remove('disabled');
             area.innerHTML = `
@@ -467,22 +476,21 @@
                     <div class="uploaded-badge">✓ Video Uploaded</div>
                     <button type="button" class="edit-upload-btn" onclick="startReplaceUpload('${uid}')">Replace video</button>
                 </div>
-                ${previewUrl ? `
+                ${thumbnailUrl ? `
                     <div class="video-thumbnail" id="vt-${uid}">
-                        <iframe src="${previewUrl}"
-                                loading="lazy"
-                                allow="encrypted-media"
-                                allowfullscreen></iframe>
+                        <img src="${thumbnailUrl}"
+                             alt="Video thumbnail"
+                             onload="onThumbnailLoaded('${uid}')"
+                             onerror="onThumbnailError('${uid}')">
                         <div class="thumbnail-status" id="ts-${uid}">
                             <span class="dot"></span>
-                            Video is processing — preview will appear shortly. Refreshing automatically...
+                            Video is processing — thumbnail will appear shortly...
                         </div>
                     </div>
                 ` : ''}
             `;
-            // Kick off auto-retry of the iframe so the player switches from
-            // "processing" to actual playback as soon as Bunny finishes encoding.
-            if (previewUrl) startThumbnailAutoRefresh(uid);
+            // Auto-retry the thumbnail download until Bunny generates it.
+            if (thumbnailUrl) startThumbnailAutoRefresh(uid);
             return;
         }
 
@@ -700,11 +708,14 @@
                 stopThumbnailAutoRefresh(uid);
                 return;
             }
-            const iframe = wrapper.querySelector('iframe');
-            if (!iframe) return;
-            const src = iframe.src;
-            iframe.src = '';
-            setTimeout(() => { iframe.src = src; }, 60);
+            const img = wrapper.querySelector('img');
+            if (!img || img.classList.contains('loaded')) {
+                stopThumbnailAutoRefresh(uid);
+                return;
+            }
+            // Force reload by appending a cache-buster query param.
+            const baseSrc = img.src.split('?')[0];
+            img.src = baseSrc + '?retry=' + Date.now();
 
             if (attempts >= THUMBNAIL_MAX_ATTEMPTS) {
                 stopThumbnailAutoRefresh(uid);
@@ -722,6 +733,22 @@
             clearInterval(thumbnailRefreshTimers[uid]);
             delete thumbnailRefreshTimers[uid];
         }
+    }
+
+    // Called when the thumbnail image loads successfully. Hides the
+    // "processing..." status and stops the auto-retry timer.
+    function onThumbnailLoaded(uid) {
+        const img = document.querySelector('#vt-' + uid + ' img');
+        if (img) img.classList.add('loaded');
+        const status = document.getElementById('ts-' + uid);
+        if (status) status.style.display = 'none';
+        stopThumbnailAutoRefresh(uid);
+    }
+
+    // Called when the thumbnail image fails to load (e.g. 404 because Bunny
+    // hasn't finished processing yet). Keep the placeholder + retry timer running.
+    function onThumbnailError(uid) {
+        // No-op — auto-refresh interval will retry. Status text already says "processing".
     }
     // ---------- end thumbnail auto-refresh ----------
 
