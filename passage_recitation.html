@@ -126,14 +126,36 @@
         .video-thumbnail {
             margin-top: 10px;
             display: block;
-        }
-        .video-thumbnail iframe {
+            position: relative;
             width: 280px;
             max-width: 100%;
+        }
+        .video-thumbnail iframe {
+            width: 100%;
             height: 158px;
             border: 1px solid #d1d5db;
             border-radius: 8px;
             background: #000;
+            display: block;
+        }
+        .thumbnail-status {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .thumbnail-status .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #f59e0b;
+            animation: pulse 1.2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50%      { opacity: 0.3; }
         }
 
         /* Replace-video controls */
@@ -264,7 +286,7 @@
         <div class="meta-row">
             <div><label>Gender<span>*</span></label>
                 <select class="gender" onchange="onFieldChange(this)">
-                    <option value="">Select<option value="Girl">Girl</option>
+                    <option value="">Select</option><option value="Girl">Girl</option>
                 </select>
             </div>
             <div><label>Standard<span>*</span></label>
@@ -325,17 +347,18 @@
 
     // Read existing instanceId from window.name if present, else generate one.
     // Run this once on bootstrap before any persist/load call.
+    // Derive a STABLE instanceId from the iframe's URL path. Each widget
+    // HTML file (story_telling.html, passage_recitation.html, etc.) gets
+    // its own bucket. This survives iframe recreation on hard reload —
+    // unlike window.name which gets wiped when Jotform reloads the parent.
     function initInstanceId() {
-        try {
-            if (window.name) {
-                const parsed = JSON.parse(window.name);
-                if (parsed && parsed.instanceId) {
-                    instanceId = String(parsed.instanceId);
-                    return;
-                }
-            }
-        } catch (e) {}
-        instanceId = "i" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        const path = (typeof window !== 'undefined' && window.location && window.location.pathname) || '';
+        const safe = path.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_');
+        instanceId = safe || 'default';
+        // Optional: if we ever want to migrate old window.name-based ids,
+        // we'd read here. Skipping that — old random ids are now orphaned
+        // (the data is still in localStorage but inaccessible). Acceptable
+        // tradeoff: persistence works again from this point forward.
     }
 
     function safeSet(storage, key, val) {
@@ -445,14 +468,21 @@
                     <button type="button" class="edit-upload-btn" onclick="startReplaceUpload('${uid}')">Replace video</button>
                 </div>
                 ${previewUrl ? `
-                    <div class="video-thumbnail">
+                    <div class="video-thumbnail" id="vt-${uid}">
                         <iframe src="${previewUrl}"
                                 loading="lazy"
                                 allow="encrypted-media"
                                 allowfullscreen></iframe>
+                        <div class="thumbnail-status" id="ts-${uid}">
+                            <span class="dot"></span>
+                            Video is processing — preview will appear shortly. Refreshing automatically...
+                        </div>
                     </div>
                 ` : ''}
             `;
+            // Kick off auto-retry of the iframe so the player switches from
+            // "processing" to actual playback as soon as Bunny finishes encoding.
+            if (previewUrl) startThumbnailAutoRefresh(uid);
             return;
         }
 
@@ -651,7 +681,52 @@
         if (!savedData) sync();
     }
 
+    // ---------- Thumbnail auto-refresh ----------
+    // After a successful upload, Bunny.net needs ~30–60s to finish encoding.
+    // The iframe initially renders the "Video is processing" state. We
+    // periodically reload it so the user automatically sees the ready preview
+    // without having to refresh the page. Each row has its own timer.
+    const thumbnailRefreshTimers = {};
+    const THUMBNAIL_RETRY_INTERVAL_MS = 20000;  // every 20 seconds
+    const THUMBNAIL_MAX_ATTEMPTS       = 30;     // ≈10 minutes total
+
+    function startThumbnailAutoRefresh(uid) {
+        stopThumbnailAutoRefresh(uid);
+        let attempts = 0;
+        const id = setInterval(() => {
+            attempts++;
+            const wrapper = document.getElementById('vt-' + uid);
+            if (!wrapper) {
+                stopThumbnailAutoRefresh(uid);
+                return;
+            }
+            const iframe = wrapper.querySelector('iframe');
+            if (!iframe) return;
+            const src = iframe.src;
+            iframe.src = '';
+            setTimeout(() => { iframe.src = src; }, 60);
+
+            if (attempts >= THUMBNAIL_MAX_ATTEMPTS) {
+                stopThumbnailAutoRefresh(uid);
+                const status = document.getElementById('ts-' + uid);
+                if (status) {
+                    status.innerHTML = '<span style="color:#9ca3af">Stopped auto-refresh. Reload the form if the preview still doesn\'t appear.</span>';
+                }
+            }
+        }, THUMBNAIL_RETRY_INTERVAL_MS);
+        thumbnailRefreshTimers[uid] = id;
+    }
+
+    function stopThumbnailAutoRefresh(uid) {
+        if (thumbnailRefreshTimers[uid]) {
+            clearInterval(thumbnailRefreshTimers[uid]);
+            delete thumbnailRefreshTimers[uid];
+        }
+    }
+    // ---------- end thumbnail auto-refresh ----------
+
     async function removeRow(uid) {
+        stopThumbnailAutoRefresh(uid);  // tear down timer if running
         const vId = videoData[uid]?.videoId;
 
         if (vId) {
@@ -761,6 +836,7 @@
     // to a failed re-upload (network drop, server error, mind-change, etc).
 
     function startReplaceUpload(uid) {
+        stopThumbnailAutoRefresh(uid);
         const row = findRow(uid);
         if (!row) return;
         const area = row.querySelector('.upload-area');
