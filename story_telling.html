@@ -122,6 +122,20 @@
 
         .uploaded-badge { display: inline-flex; align-items: center; background: #e6f4ea; color: #1e7e34; padding: 8px 16px; border-radius: 6px; font-weight: bold; }
 
+        /* Video preview shown after a successful upload */
+        .video-thumbnail {
+            margin-top: 10px;
+            display: block;
+        }
+        .video-thumbnail iframe {
+            width: 280px;
+            max-width: 100%;
+            height: 158px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            background: #000;
+        }
+
         /* Replace-video controls */
         .upload-row {
             display: flex;
@@ -420,12 +434,24 @@
         area.id = "up-" + uid;
 
         if (videoData[uid]?.videoId) {
+            const v = videoData[uid];
+            const previewUrl = (v.libraryId && v.videoId)
+                ? `https://iframe.mediadelivery.net/embed/${v.libraryId}/${v.videoId}?autoplay=false&muted=true`
+                : '';
             area.classList.remove('disabled');
             area.innerHTML = `
                 <div class="upload-row">
                     <div class="uploaded-badge">✓ Video Uploaded</div>
                     <button type="button" class="edit-upload-btn" onclick="startReplaceUpload('${uid}')">Replace video</button>
                 </div>
+                ${previewUrl ? `
+                    <div class="video-thumbnail">
+                        <iframe src="${previewUrl}"
+                                loading="lazy"
+                                allow="encrypted-media"
+                                allowfullscreen></iframe>
+                    </div>
+                ` : ''}
             `;
             return;
         }
@@ -667,25 +693,8 @@
             return;
         }
 
-        const fName = row.querySelector('.fName').value;
-        const sName = row.querySelector('.sName').value;
-        const stdVal = row.querySelector('.std').value;
-
-        const clean = (str) => {
-            if (!str) return "";
-            return str.toString()
-                .toLowerCase()
-                .trim()
-                .replace(/[^a-z0-9]/gi, '_')
-                .replace(/_+/g, '_');
-        };
-
-        const safeFName = clean(fName);
-        const safeSName = clean(sName);
-        const titleParts = ["story_telling", safeFName];
-        if (safeSName) titleParts.push(safeSName);
-        titleParts.push("std", stdVal);
-        const videoTitle = titleParts.join("_");
+        // Use the original filename (without extension) as the video title.
+        const videoTitle = (file.name || 'video').replace(/\.[^/.]+$/, '');
 
         const area = document.getElementById("up-" + uid);
         videoData[uid] = { ...(videoData[uid] || {}), uploading: true };
@@ -797,21 +806,8 @@
         // Snapshot of the current (about-to-be-replaced) video.
         const oldVideo = { ...(videoData[uid] || {}) };
 
-        const fName = row.querySelector('.fName').value;
-        const sName = row.querySelector('.sName').value;
-        const stdVal = row.querySelector('.std').value;
-        const clean = (str) => {
-            if (!str) return "";
-            return str.toString().toLowerCase().trim()
-                .replace(/[^a-z0-9]/gi, '_')
-                .replace(/_+/g, '_');
-        };
-        const safeFName = clean(fName);
-        const safeSName = clean(sName);
-        const titleParts = ["story_telling", safeFName];
-        if (safeSName) titleParts.push(safeSName);
-        titleParts.push("std", stdVal);
-        const videoTitle = titleParts.join("_");
+        // Use the original filename (without extension) as the video title.
+        const videoTitle = (file.name || 'video').replace(/\.[^/.]+$/, '');
 
         const area = row.querySelector('.upload-area');
         area.id = "up-" + uid;
