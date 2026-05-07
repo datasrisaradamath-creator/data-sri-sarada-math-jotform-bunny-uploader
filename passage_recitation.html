@@ -437,14 +437,14 @@
         if (mandatoryFilled(row)) {
             area.classList.remove('disabled');
             area.innerHTML = `
-                <label>Upload Video<span>*</span></label>
+                <label>Upload Video</label>
                 <input type="file" accept="video/*" onchange="handleUpload('${uid}', this.files[0])">
                 <div class="upload-hint">Optional. Maximum file size: 25 MB.</div>
             `;
         } else {
             area.classList.add('disabled');
             area.innerHTML = `
-                <label>Upload Video<span>*</span></label>
+                <label>Upload Video</label>
                 <input type="file" accept="video/*" disabled>
                 <div class="upload-hint">Please fill <b>First Name</b>, <b>Gender</b> and <b>Standard</b> to enable upload.</div>
             `;
