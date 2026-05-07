@@ -696,7 +696,7 @@
     // without having to refresh the page. Each row has its own timer.
     const thumbnailRefreshTimers = {};
     const THUMBNAIL_RETRY_INTERVAL_MS = 20000;  // every 20 seconds
-    const THUMBNAIL_MAX_ATTEMPTS       = 30;     // ≈10 minutes total
+    const THUMBNAIL_MAX_ATTEMPTS       = 10;      //
 
     function startThumbnailAutoRefresh(uid) {
         stopThumbnailAutoRefresh(uid);
@@ -709,20 +709,27 @@
                 return;
             }
             const img = wrapper.querySelector('img');
-            if (!img || img.classList.contains('loaded')) {
+            if (!img) {
                 stopThumbnailAutoRefresh(uid);
                 return;
             }
-            // Force reload by appending a cache-buster query param.
+            // ----- STOP CONDITIONS -----
+            // 1. We previously marked it loaded via onload callback.
+            // 2. naturalWidth > 0 → image data is actually decoded (catches the
+            //    case where onload fired but the inline handler didn't run).
+            if (img.classList.contains('loaded') || img.naturalWidth > 0) {
+                onThumbnailLoaded(uid);     // ensure UI/state consistent
+                stopThumbnailAutoRefresh(uid);
+                return;
+            }
+            // ----- RETRY -----
             const baseSrc = img.src.split('?')[0];
             img.src = baseSrc + '?retry=' + Date.now();
 
             if (attempts >= THUMBNAIL_MAX_ATTEMPTS) {
                 stopThumbnailAutoRefresh(uid);
                 const status = document.getElementById('ts-' + uid);
-                if (status) {
-                    status.innerHTML = '<span style="color:#9ca3af">Stopped auto-refresh. Reload the form if the preview still doesn\'t appear.</span>';
-                }
+                if (status) status.style.display = 'none';
             }
         }, THUMBNAIL_RETRY_INTERVAL_MS);
         thumbnailRefreshTimers[uid] = id;
@@ -736,9 +743,12 @@
     }
 
     // Called when the thumbnail image loads successfully. Hides the
-    // "processing..." status and stops the auto-retry timer.
+    // "processing..." status and stops the auto-retry timer. Idempotent.
     function onThumbnailLoaded(uid) {
         const img = document.querySelector('#vt-' + uid + ' img');
+        // Guard against onload firing on an empty/placeholder load — only
+        // treat as loaded when actual image bytes were decoded.
+        if (img && img.naturalWidth === 0) return;
         if (img) img.classList.add('loaded');
         const status = document.getElementById('ts-' + uid);
         if (status) status.style.display = 'none';
