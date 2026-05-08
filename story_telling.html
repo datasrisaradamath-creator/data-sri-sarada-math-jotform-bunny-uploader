@@ -127,12 +127,12 @@
             margin-top: 10px;
             display: block;
             position: relative;
-            width: 280px;
+            width: 360px;          /* was 280; larger so Bunny's left-side play/pause button isn't clipped */
             max-width: 100%;
         }
         .video-thumbnail iframe {
             width: 100%;
-            height: 158px;
+            height: 203px;         /* was 158; 16:9 ratio of 360px */
             border: 1px solid #d1d5db;
             border-radius: 8px;
             background: #000;
@@ -471,8 +471,10 @@
 
         if (videoData[uid]?.videoId) {
             const v = videoData[uid];
+            // autoplay=false stops the player from auto-starting on form edit/persistence restore.
+            // preload=false avoids fetching the video until the user clicks play.
             const playerUrl = (v.libraryId && v.videoId)
-                ? `https://iframe.mediadelivery.net/embed/${v.libraryId}/${v.videoId}`
+                ? `https://iframe.mediadelivery.net/embed/${v.libraryId}/${v.videoId}?autoplay=false&preload=false`
                 : '';
             area.classList.remove('disabled');
             area.innerHTML = `
@@ -483,7 +485,7 @@
                 ${playerUrl ? `
                     <div class="video-thumbnail" id="vt-${uid}">
                         <iframe src="${playerUrl}"
-                                allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen"
+                                allow="accelerometer; gyroscope; encrypted-media; picture-in-picture; fullscreen"
                                 allowfullscreen
                                 loading="lazy"></iframe>
                         ${justUploaded ? `
