@@ -9,7 +9,9 @@
 
         body {
             font-family: -apple-system, sans-serif;
-            padding: 25px 5px 15px 5px;
+            /* Tighter side padding so the video player and other content get
+               the maximum width available, especially on phones. */
+            padding: 20px 2px 12px 2px;
         }
 
         #widget-wrap {
@@ -55,7 +57,8 @@
 
         .student-block {
             position: relative;
-            padding: 25px 12px 20px 12px;
+            /* Slimmer side padding (was 12px) so video preview can use more width on phones */
+            padding: 25px 8px 20px 8px;
             border: 1px solid #e1e4e8;
             border-radius: 12px;
             background: #ffffff;
@@ -102,7 +105,7 @@
             gap: 6px; height: 40px; padding: 0 12px; font-size: 13px; font-weight: 600;
         }
 
-        .upload-area { padding: 15px; border: 2px dashed #3498db; border-radius: 8px; background: #f1f7fd; }
+        .upload-area { padding: 12px 10px; border: 2px dashed #3498db; border-radius: 8px; background: #f1f7fd; }
         .upload-area.disabled { border-color: #cbd5e0; background: #f7fafc; opacity: 0.7; }
         .upload-hint { font-size: 12px; color: #6b7280; margin-top: 6px; }
 
@@ -127,12 +130,21 @@
             margin-top: 10px;
             display: block;
             position: relative;
-            width: 360px;          /* was 280; larger so Bunny's left-side play/pause button isn't clipped */
+            width: 360px;          /* desktop default — leaves room for player controls */
             max-width: 100%;
+        }
+        /* On phones, let the player take the full available width so Bunny's
+           bottom-left play/pause button never gets clipped. */
+        @media (max-width: 480px) {
+            .video-thumbnail { width: 100%; }
         }
         .video-thumbnail iframe {
             width: 100%;
-            height: 203px;         /* was 158; 16:9 ratio of 360px */
+            /* Aspect-ratio gives a true 16:9 box at any width, replacing the
+               fixed 203px height (which was too tall for the smaller mobile
+               player width and too short on desktop full-width fallback). */
+            aspect-ratio: 16 / 9;
+            height: auto;
             border: 1px solid #d1d5db;
             border-radius: 8px;
             background: #000;
@@ -485,8 +497,9 @@
                 ${playerUrl ? `
                     <div class="video-thumbnail" id="vt-${uid}">
                         <iframe src="${playerUrl}"
-                                allow="accelerometer; gyroscope; encrypted-media; picture-in-picture; fullscreen"
+                                allow="accelerometer; autoplay; gyroscope; encrypted-media; picture-in-picture; fullscreen"
                                 allowfullscreen
+                                playsinline
                                 loading="lazy"></iframe>
                         ${justUploaded ? `
                             <div class="thumbnail-status" id="ts-${uid}">
