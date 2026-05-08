@@ -333,15 +333,19 @@
         return document.querySelector(`#student-list .student-block[id="${uid}"]`);
     }
 
-    // ---------- Persistence layers (multi-fallback) ----------
+    // ---------- Persistence layers (per-tab) ----------
     //
-    // Important: a single Jotform form can have MULTIPLE instances of this
-    // widget (Story Telling on one page, Passage Recitation on another, etc).
-    // sessionStorage/localStorage are origin-scoped, so instances share them.
-    // To avoid one instance's data leaking into another, we include a unique
-    // `instanceId` in the storage key. The id is cached in this iframe's
-    // `window.name` so it survives reloads/back-forward navigation but is
-    // separate per iframe (each Jotform widget instance has its own iframe).
+    // Persistence scope = ONE BROWSER TAB. We deliberately avoid
+    // localStorage so that opening the form in a NEW TAB starts fresh.
+    //
+    //   • sessionStorage  → survives F5 / back-forward in the same tab.
+    //   • window.name     → backup that survives in-tab reloads even if
+    //                       sessionStorage is unavailable (incognito etc.)
+    //
+    // A Jotform form can host multiple instances of this widget on
+    // different pages (Story Telling, Passage Recitation, ...).
+    // sessionStorage is origin-scoped, so we namespace via a stable
+    // `instanceId` derived from the iframe URL path.
     function storageKey() {
         return "jfWidgetState::"
             + (formIdForStorage || "default")
@@ -358,10 +362,15 @@
         const path = (typeof window !== 'undefined' && window.location && window.location.pathname) || '';
         const safe = path.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_');
         instanceId = safe || 'default';
-        // Optional: if we ever want to migrate old window.name-based ids,
-        // we'd read here. Skipping that — old random ids are now orphaned
-        // (the data is still in localStorage but inaccessible). Acceptable
-        // tradeoff: persistence works again from this point forward.
+        // One-time cleanup: previous versions also wrote to localStorage,
+        // which leaked widget state across tabs. Wipe any leftover entry
+        // for this instance so opening a new tab really does start fresh.
+        try {
+            const key = storageKey();
+            if (window.localStorage && localStorage.getItem(key) != null) {
+                localStorage.removeItem(key);
+            }
+        } catch (e) {}
     }
 
     function safeSet(storage, key, val) {
@@ -380,7 +389,6 @@
         });
         try { window.name = wrapped; } catch (e) {}
         safeSet(sessionStorage, key, jsonString || "");
-        safeSet(localStorage,   key, jsonString || "");
     }
 
     function loadAny() {
@@ -393,8 +401,7 @@
             }
         } catch (e) {}
         const fromSession = safeGet(sessionStorage, key);
-        const fromLocal   = safeGet(localStorage,   key);
-        return { fromWindowName, fromSession, fromLocal };
+        return { fromWindowName, fromSession, fromLocal: "" };
     }
 
     function probeStorage() {
@@ -402,7 +409,7 @@
             try { s.setItem('__t__', '1'); s.removeItem('__t__'); return name + ':ok'; }
             catch (e) { return name + ':BLOCKED(' + (e.name || 'err') + ')'; }
         };
-        return [probe(sessionStorage, 'session'), probe(localStorage, 'local')].join(' | ');
+        return probe(sessionStorage, 'session');
     }
     // ---------- end persistence layers ----------
 
