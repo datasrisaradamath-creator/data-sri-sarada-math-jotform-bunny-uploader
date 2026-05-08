@@ -130,19 +130,13 @@
             width: 280px;
             max-width: 100%;
         }
-        .video-thumbnail img {
+        .video-thumbnail iframe {
             width: 100%;
             height: 158px;
-            object-fit: cover;
             border: 1px solid #d1d5db;
             border-radius: 8px;
-            background: #f3f4f6;
+            background: #000;
             display: block;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-        .video-thumbnail img.loaded {
-            opacity: 1;
         }
         .thumbnail-status {
             font-size: 12px;
@@ -460,15 +454,18 @@
     }
 
     // Renders the upload area for a row based on current state.
-    function renderUploadArea(row) {
+    // `justUploaded` (default false) is set to true ONLY when called right
+    // after a fresh upload finishes — it shows the "processing" status and
+    // starts the auto-refresh timer. Persistence restores skip both.
+    function renderUploadArea(row, justUploaded = false) {
         const uid = row.id;
         const area = row.querySelector('.upload-area');
         area.id = "up-" + uid;
 
         if (videoData[uid]?.videoId) {
             const v = videoData[uid];
-            const thumbnailUrl = (BUNNY_PULL_ZONE_HOST && v.videoId)
-                ? `https://${BUNNY_PULL_ZONE_HOST}.b-cdn.net/${v.videoId}/thumbnail.jpg`
+            const playerUrl = (v.libraryId && v.videoId)
+                ? `https://iframe.mediadelivery.net/embed/${v.libraryId}/${v.videoId}`
                 : '';
             area.classList.remove('disabled');
             area.innerHTML = `
@@ -476,21 +473,25 @@
                     <div class="uploaded-badge">✓ Video Uploaded</div>
                     <button type="button" class="edit-upload-btn" onclick="startReplaceUpload('${uid}')">Replace video</button>
                 </div>
-                ${thumbnailUrl ? `
+                ${playerUrl ? `
                     <div class="video-thumbnail" id="vt-${uid}">
-                        <img src="${thumbnailUrl}"
-                             alt="Video thumbnail"
-                             onload="onThumbnailLoaded('${uid}')"
-                             onerror="onThumbnailError('${uid}')">
-                        <div class="thumbnail-status" id="ts-${uid}">
-                            <span class="dot"></span>
-                            Video is processing — thumbnail will appear shortly...
-                        </div>
+                        <iframe src="${playerUrl}"
+                                allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen"
+                                allowfullscreen
+                                loading="lazy"></iframe>
+                        ${justUploaded ? `
+                            <div class="thumbnail-status" id="ts-${uid}">
+                                <span class="dot"></span>
+                                Video is processing — preview will be ready shortly...
+                            </div>
+                        ` : ''}
                     </div>
                 ` : ''}
             `;
-            // Auto-retry the thumbnail download until Bunny generates it.
-            if (thumbnailUrl) startThumbnailAutoRefresh(uid);
+            // Only poll for processing-completion on a brand new upload.
+            // Restored entries (from persistence) skip this — the video is
+            // already encoded by the time the user comes back.
+            if (justUploaded && playerUrl) startThumbnailAutoRefresh(uid);
             return;
         }
 
@@ -689,50 +690,54 @@
         if (!savedData) sync();
     }
 
-    // ---------- Thumbnail auto-refresh ----------
-    // After a successful upload, Bunny.net needs ~30–60s to finish encoding.
-    // The iframe initially renders the "Video is processing" state. We
-    // periodically reload it so the user automatically sees the ready preview
-    // without having to refresh the page. Each row has its own timer.
+    // ---------- Encoding-ready poller ----------
+    // Bunny.net needs ~30-60s to finish encoding after upload. The embedded
+    // iframe player initially shows a "Video is being processed" screen.
+    // We can't read iframe contents (cross-origin), so we probe the
+    // thumbnail.jpg URL on the pull-zone — it 404s while encoding and
+    // returns a JPEG once done. When the probe succeeds we reload the
+    // iframe ONCE (so the player swaps to the playable state) and stop.
+    //
+    // Started ONLY for fresh uploads. Restored entries skip this entirely.
     const thumbnailRefreshTimers = {};
     const THUMBNAIL_RETRY_INTERVAL_MS = 20000;  // every 20 seconds
-    const THUMBNAIL_MAX_ATTEMPTS       = 10;      //
+    const THUMBNAIL_MAX_ATTEMPTS       = 9;      // ~3 minutes total
 
     function startThumbnailAutoRefresh(uid) {
         stopThumbnailAutoRefresh(uid);
+        const v = videoData[uid];
+        if (!v?.videoId || !BUNNY_PULL_ZONE_HOST) return;
+        const probeBase = `https://${BUNNY_PULL_ZONE_HOST}.b-cdn.net/${v.videoId}/thumbnail.jpg`;
+
         let attempts = 0;
-        const id = setInterval(() => {
+        const tick = () => {
             attempts++;
             const wrapper = document.getElementById('vt-' + uid);
             if (!wrapper) {
                 stopThumbnailAutoRefresh(uid);
                 return;
             }
-            const img = wrapper.querySelector('img');
-            if (!img) {
-                stopThumbnailAutoRefresh(uid);
-                return;
-            }
-            // ----- STOP CONDITIONS -----
-            // 1. We previously marked it loaded via onload callback.
-            // 2. naturalWidth > 0 → image data is actually decoded (catches the
-            //    case where onload fired but the inline handler didn't run).
-            if (img.classList.contains('loaded') || img.naturalWidth > 0) {
-                onThumbnailLoaded(uid);     // ensure UI/state consistent
-                stopThumbnailAutoRefresh(uid);
-                return;
-            }
-            // ----- RETRY -----
-            const baseSrc = img.src.split('?')[0];
-            img.src = baseSrc + '?retry=' + Date.now();
 
-            if (attempts >= THUMBNAIL_MAX_ATTEMPTS) {
-                stopThumbnailAutoRefresh(uid);
-                const status = document.getElementById('ts-' + uid);
-                if (status) status.style.display = 'none';
-            }
-        }, THUMBNAIL_RETRY_INTERVAL_MS);
-        thumbnailRefreshTimers[uid] = id;
+            const probe = new Image();
+            probe.onload = () => {
+                // naturalWidth>0 confirms a real JPEG (not a 0-byte/error page).
+                if (probe.naturalWidth > 0) {
+                    onVideoReady(uid);
+                }
+            };
+            probe.onerror = () => {
+                if (attempts >= THUMBNAIL_MAX_ATTEMPTS) {
+                    // Stop quietly — leave iframe in place; user can refresh.
+                    stopThumbnailAutoRefresh(uid);
+                    const status = document.getElementById('ts-' + uid);
+                    if (status) status.style.display = 'none';
+                }
+            };
+            probe.src = probeBase + '?_t=' + Date.now();
+        };
+
+        tick(); // probe immediately, then on the interval
+        thumbnailRefreshTimers[uid] = setInterval(tick, THUMBNAIL_RETRY_INTERVAL_MS);
     }
 
     function stopThumbnailAutoRefresh(uid) {
@@ -742,25 +747,22 @@
         }
     }
 
-    // Called when the thumbnail image loads successfully. Hides the
-    // "processing..." status and stops the auto-retry timer. Idempotent.
-    function onThumbnailLoaded(uid) {
-        const img = document.querySelector('#vt-' + uid + ' img');
-        // Guard against onload firing on an empty/placeholder load — only
-        // treat as loaded when actual image bytes were decoded.
-        if (img && img.naturalWidth === 0) return;
-        if (img) img.classList.add('loaded');
+    // Called once we detect the video has finished encoding. Reloads the
+    // iframe so the player flips from "processing" to playable, hides the
+    // status, and stops the poller. Idempotent.
+    function onVideoReady(uid) {
+        stopThumbnailAutoRefresh(uid);
+        const wrapper = document.getElementById('vt-' + uid);
+        if (!wrapper) return;
+        const iframe = wrapper.querySelector('iframe');
+        if (iframe) {
+            const baseSrc = iframe.src.split('?')[0];
+            iframe.src = baseSrc + '?_t=' + Date.now();
+        }
         const status = document.getElementById('ts-' + uid);
         if (status) status.style.display = 'none';
-        stopThumbnailAutoRefresh(uid);
     }
-
-    // Called when the thumbnail image fails to load (e.g. 404 because Bunny
-    // hasn't finished processing yet). Keep the placeholder + retry timer running.
-    function onThumbnailError(uid) {
-        // No-op — auto-refresh interval will retry. Status text already says "processing".
-    }
-    // ---------- end thumbnail auto-refresh ----------
+    // ---------- end encoding-ready poller ----------
 
     async function removeRow(uid) {
         stopThumbnailAutoRefresh(uid);  // tear down timer if running
@@ -844,7 +846,7 @@
                     };
                     const r = findRow(uid);
                     if (r) {
-                        renderUploadArea(r);
+                        renderUploadArea(r, true);
                         clearUploadError(r);
                         if (mandatoryFilled(r)) r.classList.remove('has-error');
                     }
@@ -975,7 +977,7 @@
                     }
                     const r = findRow(uid);
                     if (r) {
-                        renderUploadArea(r);
+                        renderUploadArea(r, true);
                         clearUploadError(r);
                         if (mandatoryFilled(r)) r.classList.remove('has-error');
                     }
