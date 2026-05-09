@@ -736,15 +736,25 @@
     //
     // Started ONLY for fresh uploads. Restored entries skip this entirely.
     const thumbnailRefreshTimers = {};
-    // Bunny's iframe player loads once and doesn't poll its own encoding state,
-    // so we periodically reload the iframe to force it to re-check. Most short
-    // videos finish encoding within 30-90s; we reload at most a few times then
-    // let the user click the "Reload preview" button if they need to.
-    const VIDEO_RELOAD_INTERVAL_MS = 30000;   // every 30 seconds
-    const VIDEO_RELOAD_MAX_ATTEMPTS = 5;      // ~2.5 minutes total
+    // Detect "video encoding complete" by probing Bunny's animated preview file
+    // (`preview.webp`). Bunny generates this ONLY after the encoding pipeline
+    // finishes, so it's a definitive ready signal — unlike `thumbnail.jpg`
+    // which appears much earlier and doesn't mean the video is playable.
+    //
+    // Workflow:
+    //   • Every 15 s, probe preview.webp.
+    //   • On success → hide our "processing" status, reload the iframe ONCE so
+    //     Bunny's player switches from "processing" to playable, and stop polling.
+    //   • On max attempts (7.5 min) → show fallback + manual reload button.
+    const VIDEO_PROBE_INTERVAL_MS  = 15000;   // every 15 seconds
+    const VIDEO_PROBE_MAX_ATTEMPTS = 30;      // ~7.5 minutes total
 
     function startThumbnailAutoRefresh(uid) {
         stopThumbnailAutoRefresh(uid);
+        const v = videoData[uid];
+        if (!v?.videoId || !BUNNY_PULL_ZONE_HOST) return;
+        const previewUrl = `https://${BUNNY_PULL_ZONE_HOST}.b-cdn.net/${v.videoId}/preview.webp`;
+
         let attempts = 0;
         const tick = () => {
             attempts++;
@@ -753,21 +763,35 @@
                 stopThumbnailAutoRefresh(uid);
                 return;
             }
-            // Reload the player iframe — Bunny will pick up the new encoded
-            // state if it's ready. Preserves autoplay/preload params.
-            reloadIframeOnly_(uid);
 
-            if (attempts >= VIDEO_RELOAD_MAX_ATTEMPTS) {
-                stopThumbnailAutoRefresh(uid);
-                const status = document.getElementById('ts-' + uid);
-                if (status) {
-                    status.innerHTML =
-                        '<span style="color:#9ca3af">If preview still says &ldquo;processing&rdquo;, click below.</span>' +
-                        ' <button type="button" class="reload-preview-btn" onclick="reloadVideoPreview(\'' + uid + '\')">Reload preview</button>';
+            const probe = new Image();
+            probe.onload = () => {
+                // naturalWidth > 0 confirms a real WebP (not 0-byte/error page).
+                if (probe.naturalWidth > 0) {
+                    stopThumbnailAutoRefresh(uid);
+                    const status = document.getElementById('ts-' + uid);
+                    if (status) status.style.display = 'none';
+                    // Reload iframe once so Bunny's player picks up the
+                    // playable state instead of staying on its "processing" UI.
+                    reloadIframeOnly_(uid);
                 }
-            }
+            };
+            probe.onerror = () => {
+                if (attempts >= VIDEO_PROBE_MAX_ATTEMPTS) {
+                    stopThumbnailAutoRefresh(uid);
+                    const status = document.getElementById('ts-' + uid);
+                    if (status) {
+                        status.innerHTML =
+                            '<span style="color:#9ca3af">If preview still says &ldquo;processing&rdquo;, click below.</span>' +
+                            ' <button type="button" class="reload-preview-btn" onclick="reloadVideoPreview(\'' + uid + '\')">Reload preview</button>';
+                    }
+                }
+            };
+            probe.src = previewUrl + '?_t=' + Date.now();
         };
-        thumbnailRefreshTimers[uid] = setInterval(tick, VIDEO_RELOAD_INTERVAL_MS);
+
+        tick();  // probe immediately, then on the interval
+        thumbnailRefreshTimers[uid] = setInterval(tick, VIDEO_PROBE_INTERVAL_MS);
     }
 
     function stopThumbnailAutoRefresh(uid) {
@@ -781,22 +805,20 @@
     // iframe so the player flips from "processing" to playable, hides the
     // status, and stops the poller. Idempotent.
     // Manual button: reload only the video iframe (preserves form data — does
-    // NOT touch the rest of the form). Used by the post-timeout fallback
-    // status. Briefly shows "Reloading…" then restores the button so the user
-    // can keep retrying.
+    // NOT touch the rest of the form). Restarts the preview.webp probe so:
+    //   • If the video is now ready, the probe succeeds and the status hides.
+    //   • If still processing, the probe runs through its full attempt budget
+    //     and restores the "Reload preview" button when it gives up.
     function reloadVideoPreview(uid) {
-        reloadIframeOnly_(uid);
         const status = document.getElementById('ts-' + uid);
-        if (!status) return;
-        const fallbackHtml =
-            '<span style="color:#9ca3af">If preview still says &ldquo;processing&rdquo;, click below.</span>' +
-            ' <button type="button" class="reload-preview-btn" onclick="reloadVideoPreview(\'' + uid + '\')">Reload preview</button>';
-        status.innerHTML = '<span style="color:#6b7280;">Reloading preview…</span>';
-        status.style.display = 'flex';
-        // Restore the button after a short pause so the user can click again.
-        setTimeout(() => {
-            if (status) status.innerHTML = fallbackHtml;
-        }, 2000);
+        if (status) {
+            status.innerHTML = '<span style="color:#6b7280;">Reloading preview…</span>';
+            status.style.display = 'flex';
+        }
+        reloadIframeOnly_(uid);
+        // Restart the probe — it'll hide the status as soon as preview.webp
+        // exists, or fall through to the fallback button after max attempts.
+        startThumbnailAutoRefresh(uid);
     }
 
     // Internal helper: reload the iframe while preserving its query params
