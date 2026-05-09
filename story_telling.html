@@ -517,12 +517,9 @@
                             <div class="thumbnail-status" id="ts-${uid}">
                                 <span class="dot"></span>
                                 Video is processing — preview will be ready shortly...
-                                <button type="button" class="reload-preview-btn" onclick="reloadVideoPreview('${uid}')">Reload preview</button>
                             </div>
                         ` : `
-                            <div class="thumbnail-status" id="ts-${uid}" style="display:none;">
-                                <button type="button" class="reload-preview-btn" onclick="reloadVideoPreview('${uid}')">Reload preview</button>
-                            </div>
+                            <div class="thumbnail-status" id="ts-${uid}" style="display:none;"></div>
                         `}
                     </div>
                 ` : ''}
@@ -784,20 +781,22 @@
     // iframe so the player flips from "processing" to playable, hides the
     // status, and stops the poller. Idempotent.
     // Manual button: reload only the video iframe (preserves form data — does
-    // NOT touch the rest of the form). Used both by the in-status "Reload
-    // preview" link and the post-restoration sticky button.
+    // NOT touch the rest of the form). Used by the post-timeout fallback
+    // status. Briefly shows "Reloading…" then restores the button so the user
+    // can keep retrying.
     function reloadVideoPreview(uid) {
         reloadIframeOnly_(uid);
         const status = document.getElementById('ts-' + uid);
-        if (status) {
-            // Show a brief "reloading" indicator then hide.
-            status.innerHTML = '<span style="color:#6b7280;">Reloading preview…</span>';
-            status.style.display = 'flex';
-            setTimeout(() => {
-                if (!status) return;
-                status.style.display = 'none';
-            }, 2000);
-        }
+        if (!status) return;
+        const fallbackHtml =
+            '<span style="color:#9ca3af">If preview still says &ldquo;processing&rdquo;, click below.</span>' +
+            ' <button type="button" class="reload-preview-btn" onclick="reloadVideoPreview(\'' + uid + '\')">Reload preview</button>';
+        status.innerHTML = '<span style="color:#6b7280;">Reloading preview…</span>';
+        status.style.display = 'flex';
+        // Restore the button after a short pause so the user can click again.
+        setTimeout(() => {
+            if (status) status.innerHTML = fallbackHtml;
+        }, 2000);
     }
 
     // Internal helper: reload the iframe while preserving its query params
@@ -816,6 +815,47 @@
             iframe.src = iframe.src + sep + '_t=' + Date.now();
         }
     }
+
+    // Bunny's iframe player communicates with the parent via postMessage
+    // (Player.js protocol). When it sends a 'ready' / 'play' / 'loadedmetadata'
+    // event it means the video is actually playable — at that point we hide
+    // our "processing" status text so it doesn't linger after the preview shows.
+    (function () {
+        const BUNNY_ORIGINS = new Set([
+            'https://iframe.mediadelivery.net',
+            'https://player.mediadelivery.net'
+        ]);
+        const READY_EVENTS = new Set([
+            'ready', 'play', 'playing', 'canplay', 'loadeddata', 'loadedmetadata'
+        ]);
+
+        window.addEventListener('message', function (event) {
+            if (!BUNNY_ORIGINS.has(event.origin)) return;
+
+            // Normalise the message payload — Bunny may send strings or objects.
+            let data = event.data;
+            if (typeof data === 'string') {
+                try { data = JSON.parse(data); } catch (_) { return; }
+            }
+            if (!data || typeof data !== 'object') return;
+
+            const evt = String(data.event || data.type || data.value || '').toLowerCase();
+            if (!READY_EVENTS.has(evt)) return;
+
+            // Find which iframe sent this event and hide its status text.
+            const iframes = document.querySelectorAll('.video-thumbnail iframe');
+            for (let i = 0; i < iframes.length; i++) {
+                if (iframes[i].contentWindow !== event.source) continue;
+                const wrapper = iframes[i].closest('.video-thumbnail');
+                if (!wrapper) continue;
+                const uid = wrapper.id.replace('vt-', '');
+                const status = document.getElementById('ts-' + uid);
+                if (status) status.style.display = 'none';
+                stopThumbnailAutoRefresh(uid);
+                break;
+            }
+        });
+    })();
     // ---------- end encoding-ready poller ----------
 
     async function removeRow(uid) {
