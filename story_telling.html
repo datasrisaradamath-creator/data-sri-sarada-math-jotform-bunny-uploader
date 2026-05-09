@@ -305,7 +305,7 @@
         <div class="name-row">
             <div><label>First Name<span>*</span></label><input type="text" class="fName" oninput="onFieldChange(this)"></div>
             <div><label>Middle Name</label><input type="text" class="mName" oninput="onFieldChange(this)"></div>
-            <div><label>Surname</label><input type="text" class="sName" oninput="onFieldChange(this)"></div>
+            <div><label>Surname<span>*</span></label><input type="text" class="sName" oninput="onFieldChange(this)"></div>
         </div>
         <div class="meta-row">
             <div><label>Gender<span>*</span></label>
@@ -477,9 +477,11 @@
         }
     }
 
-    // Returns true when the three mandatory text/select fields are filled
+    // Returns true when the four mandatory text/select fields are filled
+    // (First Name, Surname, Gender, Standard).
     function mandatoryFilled(row) {
         return !!(row.querySelector('.fName').value.trim()
+            && row.querySelector('.sName').value.trim()
             && row.querySelector('.gender').value
             && row.querySelector('.std').value);
     }
