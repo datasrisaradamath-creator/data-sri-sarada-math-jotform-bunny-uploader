@@ -549,7 +549,7 @@
             area.innerHTML = `
                 <label>Upload Video</label>
                 <input type="file" accept="video/*" disabled>
-                <div class="upload-hint">Please fill <b>First Name</b>, <b>Gender</b> and <b>Standard</b> to enable upload.</div>
+                <div class="upload-hint">Please fill <b>First Name</b>, <b>Surname</b>, <b>Gender</b> and <b>Standard</b> to enable upload.</div>
             `;
         }
     }
@@ -636,10 +636,10 @@
                 banner.textContent = 'Please add at least one student before continuing.';
             } else if (state.missing.length === 1) {
                 banner.textContent =
-                    `Student ${state.missing[0]} is incomplete. Please fill First Name, Gender and Standard before continuing.`;
+                    `Student ${state.missing[0]} is incomplete. Please fill First Name, Surname, Gender and Standard before continuing.`;
             } else {
                 banner.textContent =
-                    `Students ${state.missing.join(', ')} are incomplete. Please fill First Name, Gender and Standard for each before continuing.`;
+                    `Students ${state.missing.join(', ')} are incomplete. Please fill First Name, Surname, Gender and Standard for each before continuing.`;
             }
             banner.classList.add('visible');
         }
@@ -910,7 +910,7 @@
         const fileInput = row.querySelector('input[type="file"]');
 
         if (!mandatoryFilled(row)) {
-            alert("Please enter First Name, Gender and Standard before uploading.");
+            alert("Please enter First Name, Surname, Gender and Standard before uploading.");
             if (fileInput) fileInput.value = "";
             renderUploadArea(row);
             return;
@@ -1026,7 +1026,7 @@
         if (!file) return;
 
         if (!mandatoryFilled(row)) {
-            alert("Please ensure First Name, Gender and Standard are filled before replacing the video.");
+            alert("Please ensure First Name, Surname, Gender and Standard are filled before replacing the video.");
             cancelReplaceUpload(uid);
             return;
         }
