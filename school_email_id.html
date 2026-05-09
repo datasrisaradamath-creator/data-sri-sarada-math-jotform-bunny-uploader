@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="//js.jotform.com/JotFormCustomWidget.min.js"></script>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+            color: #222;
+        }
+        body { padding: 6px 4px; }
+
+        input[type="email"] {
+            width: 100%;
+            padding: 9px 10px;
+            border: 1px solid #ccd0d5;
+            border-radius: 6px;
+            font-size: 14px;
+            box-sizing: border-box;
+            background: #fff;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        input[type="email"]:focus {
+            outline: none;
+            border-color: #1B6CA8;
+            box-shadow: 0 0 0 3px rgba(27,108,168,0.15);
+        }
+        input.invalid { border-color: #d73a49; }
+
+        .status {
+            font-size: 12px;
+            margin-top: 6px;
+            color: #6b7280;
+            min-height: 16px;
+        }
+        .status.checking { color: #6b7280; }
+        .status.ok       { color: #1e7e34; font-weight: 500; }
+        .status.invalid  { color: #d73a49; }
+
+        /* ─── Duplicate banner ─── */
+        .dup-card {
+            margin-top: 12px;
+            border: 1px solid #f5c2c7;
+            border-radius: 10px;
+            background: #fff8f8;
+            box-shadow: 0 2px 8px rgba(220, 53, 69, 0.06);
+            overflow: hidden;
+            font-size: 13px;
+            line-height: 1.45;
+            color: #58151c;
+        }
+        .dup-header {
+            background: #f8d7da;
+            padding: 12px 16px;
+            font-size: 14px;
+            font-weight: 700;
+            color: #842029;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .dup-header .icon {
+            font-size: 18px;
+            line-height: 1;
+        }
+        .dup-body {
+            padding: 14px 16px;
+        }
+        .dup-intro {
+            margin: 0 0 12px 0;
+            color: #58151c;
+        }
+        .dup-intro .school {
+            color: #1B6CA8;
+            font-weight: 700;
+        }
+        .dup-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0 0 14px 0;
+            background: #fff;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid #f1d3d6;
+        }
+        .dup-table td {
+            padding: 7px 10px;
+            font-size: 12.5px;
+            border-bottom: 1px solid #f6e5e7;
+            vertical-align: top;
+        }
+        .dup-table tr:last-child td { border-bottom: 0; }
+        .dup-table .label {
+            color: #6b7280;
+            font-weight: 500;
+            width: 38%;
+            white-space: nowrap;
+        }
+        .dup-table .value {
+            color: #222;
+            font-weight: 600;
+            word-break: break-word;
+        }
+
+        .dup-action {
+            background: #fff3cd;
+            border: 1px solid #ffe08a;
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin: 0 0 12px 0;
+            color: #5f4500;
+            font-size: 13px;
+        }
+        .dup-action b { color: #5f4500; }
+
+        .edit-link {
+            display: inline-block;
+            padding: 10px 18px;
+            background: #1B6CA8;
+            color: #fff !important;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 13px;
+            transition: background 0.15s;
+        }
+        .edit-link:hover { background: #155a8b; }
+
+        .spinner {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border: 2px solid #ccc;
+            border-top-color: #1B6CA8;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <input type="email" id="email" placeholder="School Email ID" autocomplete="email" />
+    <div id="status" class="status"></div>
+
+<script>
+    // ─────────────────────────────────────────────────────────
+    // CONFIG — paste your Apps Script web-app URL here.
+    // ─────────────────────────────────────────────────────────
+    const APPS_SCRIPT_URL =
+        'https://script.google.com/macros/s/REPLACE_WITH_YOUR_DEPLOYMENT_ID/exec';
+
+    const DEBOUNCE_MS       = 600;     // wait this long after user stops typing
+    const RECHECK_AFTER_MS  = 60000;   // re-use a recent result for the same email
+
+    const input  = document.getElementById('email');
+    const status = document.getElementById('status');
+
+    let checkTimer  = null;
+    let lastChecked = { email: '', at: 0, found: false, info: null };
+
+    // ────────── Auto-resize iframe ──────────
+    if (window.ResizeObserver) {
+        new ResizeObserver(() => {
+            try {
+                JFCustomWidget.requestFrameResize({
+                    width: '100%',
+                    height: document.body.offsetHeight + 20
+                });
+            } catch (e) {}
+        }).observe(document.body);
+    }
+
+    // ────────── JotForm lifecycle ──────────
+    JFCustomWidget.subscribe('ready', function (data) {
+        if (data && data.value) input.value = data.value;
+        sendUpward();
+        if (isValidEmail(input.value)) scheduleCheck(0);
+    });
+
+    JFCustomWidget.subscribe('submit', function () {
+        const email = input.value.trim();
+        const valid = isValidEmail(email) && !lastChecked.found;
+        JFCustomWidget.sendSubmit({ value: email, valid: valid });
+    });
+
+    // ────────── Input handler ──────────
+    input.addEventListener('input', function () {
+        clearTimeout(checkTimer);
+        clearStatus();
+        input.classList.remove('invalid');
+
+        const email = input.value.trim();
+        if (!email) { sendUpward(); return; }
+
+        if (!isValidEmail(email)) {
+            input.classList.add('invalid');
+            setStatus('Please enter a valid email address.', 'invalid');
+            sendUpward();
+            return;
+        }
+        scheduleCheck(DEBOUNCE_MS);
+    });
+
+    function scheduleCheck(delay) {
+        const email = input.value.trim().toLowerCase();
+        if (lastChecked.email === email &&
+            (Date.now() - lastChecked.at) < RECHECK_AFTER_MS) {
+            applyResult(lastChecked.found, lastChecked.info);
+            return;
+        }
+        setStatus('<span class="spinner"></span>Checking for previous registrations…', 'checking');
+        checkTimer = setTimeout(() => doCheck(email), delay);
+    }
+
+    async function doCheck(email) {
+        try {
+            const url = APPS_SCRIPT_URL +
+                '?action=checkEmail&email=' + encodeURIComponent(email);
+            const res = await fetch(url, { method: 'GET' });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            lastChecked = { email: email, at: Date.now(), found: !!data.found, info: data };
+            applyResult(data.found, data);
+        } catch (err) {
+            setStatus('Could not check registrations (' + err.message + '). You can still submit.', '');
+            sendUpward();
+        }
+    }
+
+    function applyResult(found, info) {
+        if (!found) {
+            setStatus('✓ No previous registration with this email.', 'ok');
+            sendUpward();
+            return;
+        }
+
+        const rows = [];
+        if (info.submitDate)   rows.push(['Originally submitted', info.submitDate]);
+        if (info.teacherName)  rows.push(['Primary teacher',      info.teacherName]);
+        if (info.teacherPhone) rows.push(['Teacher contact',      info.teacherPhone]);
+        if (info.teacherEmail) rows.push(['Teacher email',        info.teacherEmail]);
+        if (info.submissionID) rows.push(['Submission ID',        info.submissionID]);
+
+        const tableHtml = rows.map(function (r) {
+            return '<tr>' +
+                     '<td class="label">' + escapeHtml(r[0]) + '</td>' +
+                     '<td class="value">' + escapeHtml(r[1]) + '</td>' +
+                   '</tr>';
+        }).join('');
+
+        const editUrl    = info.editURL ? escapeHtml(info.editURL) : '';
+        const editButton = editUrl
+            ? '<a class="edit-link" href="' + editUrl + '" target="_blank" rel="noopener">' +
+                  '✎ Edit Existing Submission' +
+              '</a>'
+            : '';
+
+        const schoolName = info.schoolName
+            ? '<span class="school">' + escapeHtml(info.schoolName) + '</span>'
+            : 'this school';
+
+        status.className = 'status';
+        status.innerHTML =
+            '<div class="dup-card">' +
+              '<div class="dup-header">' +
+                '<span class="icon">⚠️</span> Existing Registration Found' +
+              '</div>' +
+              '<div class="dup-body">' +
+                '<p class="dup-intro">A submission for ' + schoolName +
+                  ' has already been registered using this email address.</p>' +
+                (rows.length ? '<table class="dup-table">' + tableHtml + '</table>' : '') +
+                '<div class="dup-action">' +
+                  '<b>Please <u>edit your existing submission</u></b> instead of creating a new one. ' +
+                  'Any changes you make will replace the previous information.' +
+                '</div>' +
+                editButton +
+              '</div>' +
+            '</div>';
+
+        // Clear the input so the (required) field is empty — JotForm will
+        // therefore prevent the submission and force a deliberate next action.
+        input.value = '';
+        sendUpward();
+    }
+
+    // ────────── Helpers ──────────
+    function sendUpward() {
+        const email = input.value.trim();
+        const valid = isValidEmail(email) && !lastChecked.found;
+        try { JFCustomWidget.sendData({ value: email, valid: valid }); } catch (e) {}
+    }
+
+    function setStatus(html, cls) {
+        status.className = 'status ' + (cls || '');
+        status.innerHTML = html;
+    }
+    function clearStatus() { status.className = 'status'; status.innerHTML = ''; }
+
+    function isValidEmail(s) {
+        return /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test((s || '').trim());
+    }
+    function escapeHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = String(s == null ? '' : s);
+        return d.innerHTML;
+    }
+</script>
+
+</body>
+</html>
