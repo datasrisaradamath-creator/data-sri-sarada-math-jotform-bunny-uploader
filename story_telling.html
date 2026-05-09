@@ -157,7 +157,19 @@
             display: flex;
             align-items: center;
             gap: 6px;
+            flex-wrap: wrap;
         }
+        .reload-preview-btn {
+            background: #fff;
+            color: #1B6CA8;
+            border: 1px solid #cbd5e0;
+            border-radius: 6px;
+            padding: 3px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .reload-preview-btn:hover { background: #f1f5f9; }
         .thumbnail-status .dot {
             width: 8px;
             height: 8px;
@@ -505,8 +517,13 @@
                             <div class="thumbnail-status" id="ts-${uid}">
                                 <span class="dot"></span>
                                 Video is processing — preview will be ready shortly...
+                                <button type="button" class="reload-preview-btn" onclick="reloadVideoPreview('${uid}')">Reload preview</button>
                             </div>
-                        ` : ''}
+                        ` : `
+                            <div class="thumbnail-status" id="ts-${uid}" style="display:none;">
+                                <button type="button" class="reload-preview-btn" onclick="reloadVideoPreview('${uid}')">Reload preview</button>
+                            </div>
+                        `}
                     </div>
                 ` : ''}
             `;
@@ -722,15 +739,15 @@
     //
     // Started ONLY for fresh uploads. Restored entries skip this entirely.
     const thumbnailRefreshTimers = {};
-    const THUMBNAIL_RETRY_INTERVAL_MS = 20000;  // every 20 seconds
-    const THUMBNAIL_MAX_ATTEMPTS       = 9;      // ~3 minutes total
+    // Bunny's iframe player loads once and doesn't poll its own encoding state,
+    // so we periodically reload the iframe to force it to re-check. Most short
+    // videos finish encoding within 30-90s; we reload at most a few times then
+    // let the user click the "Reload preview" button if they need to.
+    const VIDEO_RELOAD_INTERVAL_MS = 30000;   // every 30 seconds
+    const VIDEO_RELOAD_MAX_ATTEMPTS = 5;      // ~2.5 minutes total
 
     function startThumbnailAutoRefresh(uid) {
         stopThumbnailAutoRefresh(uid);
-        const v = videoData[uid];
-        if (!v?.videoId || !BUNNY_PULL_ZONE_HOST) return;
-        const probeBase = `https://${BUNNY_PULL_ZONE_HOST}.b-cdn.net/${v.videoId}/thumbnail.jpg`;
-
         let attempts = 0;
         const tick = () => {
             attempts++;
@@ -739,27 +756,21 @@
                 stopThumbnailAutoRefresh(uid);
                 return;
             }
+            // Reload the player iframe — Bunny will pick up the new encoded
+            // state if it's ready. Preserves autoplay/preload params.
+            reloadIframeOnly_(uid);
 
-            const probe = new Image();
-            probe.onload = () => {
-                // naturalWidth>0 confirms a real JPEG (not a 0-byte/error page).
-                if (probe.naturalWidth > 0) {
-                    onVideoReady(uid);
+            if (attempts >= VIDEO_RELOAD_MAX_ATTEMPTS) {
+                stopThumbnailAutoRefresh(uid);
+                const status = document.getElementById('ts-' + uid);
+                if (status) {
+                    status.innerHTML =
+                        '<span style="color:#9ca3af">If preview still says &ldquo;processing&rdquo;, click below.</span>' +
+                        ' <button type="button" class="reload-preview-btn" onclick="reloadVideoPreview(\'' + uid + '\')">Reload preview</button>';
                 }
-            };
-            probe.onerror = () => {
-                if (attempts >= THUMBNAIL_MAX_ATTEMPTS) {
-                    // Stop quietly — leave iframe in place; user can refresh.
-                    stopThumbnailAutoRefresh(uid);
-                    const status = document.getElementById('ts-' + uid);
-                    if (status) status.style.display = 'none';
-                }
-            };
-            probe.src = probeBase + '?_t=' + Date.now();
+            }
         };
-
-        tick(); // probe immediately, then on the interval
-        thumbnailRefreshTimers[uid] = setInterval(tick, THUMBNAIL_RETRY_INTERVAL_MS);
+        thumbnailRefreshTimers[uid] = setInterval(tick, VIDEO_RELOAD_INTERVAL_MS);
     }
 
     function stopThumbnailAutoRefresh(uid) {
@@ -772,17 +783,38 @@
     // Called once we detect the video has finished encoding. Reloads the
     // iframe so the player flips from "processing" to playable, hides the
     // status, and stops the poller. Idempotent.
-    function onVideoReady(uid) {
-        stopThumbnailAutoRefresh(uid);
+    // Manual button: reload only the video iframe (preserves form data — does
+    // NOT touch the rest of the form). Used both by the in-status "Reload
+    // preview" link and the post-restoration sticky button.
+    function reloadVideoPreview(uid) {
+        reloadIframeOnly_(uid);
+        const status = document.getElementById('ts-' + uid);
+        if (status) {
+            // Show a brief "reloading" indicator then hide.
+            status.innerHTML = '<span style="color:#6b7280;">Reloading preview…</span>';
+            status.style.display = 'flex';
+            setTimeout(() => {
+                if (!status) return;
+                status.style.display = 'none';
+            }, 2000);
+        }
+    }
+
+    // Internal helper: reload the iframe while preserving its query params
+    // (autoplay=false&preload=false), adding only a cache-buster.
+    function reloadIframeOnly_(uid) {
         const wrapper = document.getElementById('vt-' + uid);
         if (!wrapper) return;
         const iframe = wrapper.querySelector('iframe');
-        if (iframe) {
-            const baseSrc = iframe.src.split('?')[0];
-            iframe.src = baseSrc + '?_t=' + Date.now();
+        if (!iframe) return;
+        try {
+            const url = new URL(iframe.src);
+            url.searchParams.set('_t', Date.now().toString());
+            iframe.src = url.toString();
+        } catch (e) {
+            const sep = iframe.src.indexOf('?') === -1 ? '?' : '&';
+            iframe.src = iframe.src + sep + '_t=' + Date.now();
         }
-        const status = document.getElementById('ts-' + uid);
-        if (status) status.style.display = 'none';
     }
     // ---------- end encoding-ready poller ----------
 
