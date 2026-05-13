@@ -192,6 +192,29 @@
     let checkTimer  = null;
     let lastChecked = { email: '', at: 0, found: false, info: null };
 
+    // ─────────────────────────────────────────────────────────
+    // Edit-mode detection — if the form was opened via
+    //   https://www.jotform.com/edit/<submissionID>
+    // we treat a "match" against THIS submissionID as the user's own
+    // entry (not a duplicate) and let them continue editing.
+    // ─────────────────────────────────────────────────────────
+    const editingSubmissionId = (function () {
+        // Look at referrer first (works in most JotForm iframe setups).
+        try {
+            const ref = String(document.referrer || '');
+            const m = ref.match(/\/edit\/(\d+)/);
+            if (m) return m[1];
+        } catch (e) {}
+        // Fall back to ancestorOrigins / top.location (cross-origin may throw).
+        try {
+            if (window.top && window.top.location && window.top.location.href) {
+                const m2 = String(window.top.location.href).match(/\/edit\/(\d+)/);
+                if (m2) return m2[1];
+            }
+        } catch (e) {}
+        return null;
+    })();
+
     // ────────── Auto-resize iframe ──────────
     if (window.ResizeObserver) {
         new ResizeObserver(() => {
@@ -264,6 +287,17 @@
     function applyResult(found, info) {
         if (!found) {
             setStatus('✓ No previous registration with this email.', 'ok');
+            sendUpward();
+            return;
+        }
+
+        // If we're editing the SAME submission this match points to, treat
+        // it as the user's own submission — not a duplicate.
+        if (editingSubmissionId && info && info.submissionID &&
+            String(info.submissionID) === String(editingSubmissionId)) {
+            setStatus('✓ You are editing your own submission — proceed normally.', 'ok');
+            // Override lastChecked so JotForm sees valid:true.
+            lastChecked.found = false;
             sendUpward();
             return;
         }
