@@ -193,19 +193,20 @@
     let lastChecked = { email: '', at: 0, found: false, info: null };
 
     // ─────────────────────────────────────────────────────────
-    // Edit-mode detection — if the form was opened via
-    //   https://www.jotform.com/edit/<submissionID>
-    // we treat a "match" against THIS submissionID as the user's own
-    // entry (not a duplicate) and let them continue editing.
+    // Edit-mode signal — set when JotForm fires `ready` with a
+    // pre-filled email value. Lets us recognize "the user's own
+    // existing email" and skip the duplicate warning.
     // ─────────────────────────────────────────────────────────
+    let originalEmail = '';
+
+    // Best-effort secondary detection via parent URL (only used if
+    // the backend returns the submission ID).
     const editingSubmissionId = (function () {
-        // Look at referrer first (works in most JotForm iframe setups).
         try {
             const ref = String(document.referrer || '');
             const m = ref.match(/\/edit\/(\d+)/);
             if (m) return m[1];
         } catch (e) {}
-        // Fall back to ancestorOrigins / top.location (cross-origin may throw).
         try {
             if (window.top && window.top.location && window.top.location.href) {
                 const m2 = String(window.top.location.href).match(/\/edit\/(\d+)/);
@@ -229,7 +230,13 @@
 
     // ────────── JotForm lifecycle ──────────
     JFCustomWidget.subscribe('ready', function (data) {
-        if (data && data.value) input.value = data.value;
+        if (data && data.value) {
+            input.value = data.value;
+            // A pre-filled value means JotForm loaded this widget with saved
+            // data — i.e., we're editing an existing submission. Remember
+            // the original email so we can recognise "the user's own entry".
+            originalEmail = String(data.value).trim().toLowerCase();
+        }
         sendUpward();
         if (isValidEmail(input.value)) scheduleCheck(0);
     });
@@ -291,12 +298,21 @@
             return;
         }
 
-        // If we're editing the SAME submission this match points to, treat
-        // it as the user's own submission — not a duplicate.
-        if (editingSubmissionId && info && info.submissionID &&
-            String(info.submissionID) === String(editingSubmissionId)) {
+        // ── If this matches the user's OWN submission, don't treat it as a duplicate ──
+        // Two signals to recognise "your own existing entry":
+        //   1. The email matches what JotForm pre-filled at ready (most reliable
+        //      — JotForm only pre-fills in edit mode).
+        //   2. The backend's submissionID matches the /edit/<id> in the parent URL.
+        const currentEmailLc = String(input.value || '').trim().toLowerCase();
+        const matchesOriginalEmail =
+            originalEmail && currentEmailLc && currentEmailLc === originalEmail;
+        const matchesEditingSid =
+            editingSubmissionId && info && info.submissionID &&
+            String(info.submissionID) === String(editingSubmissionId);
+
+        if (matchesOriginalEmail || matchesEditingSid) {
             setStatus('✓ You are editing your own submission — proceed normally.', 'ok');
-            // Override lastChecked so JotForm sees valid:true.
+            // Tell JotForm this is valid; don't clear the input.
             lastChecked.found = false;
             sendUpward();
             return;
