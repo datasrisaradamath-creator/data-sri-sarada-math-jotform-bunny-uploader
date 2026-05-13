@@ -305,6 +305,9 @@
                 if (!editingSubmissionId) editingSubmissionId = ctx.sid;
                 console.log('[email-checker][postMessage] captured edit sid =', ctx.sid,
                     'isEdit=', ctx.isEdit);
+                // If the field is still empty and we never restored a value,
+                // ask the backend for the email tied to this submission.
+                if (!originalEmail && !input.value) fetchEmailBySid(ctx.sid);
                 if (isValidEmail(input.value)) scheduleCheck(0);
                 return;
             }
@@ -415,6 +418,11 @@
 
         if (saved) {
             applyRestoredValue('ready', saved);
+        } else if (editingSubmissionId) {
+            // JotForm didn't ship the saved value, but we have the submission
+            // ID — pull the email from our backend and pre-fill the field.
+            console.log('[email-checker]   no value from JotForm; fetching by sid…');
+            fetchEmailBySid(editingSubmissionId);
         } else {
             console.log('[email-checker]   no pre-filled value yet (may still arrive via "populate")');
         }
@@ -426,6 +434,28 @@
         sendUpward();
         if (isValidEmail(input.value)) scheduleCheck(0);
     });
+
+    // Edit-mode prefill fallback: when JotForm gives us a submission ID but
+    // no saved value, look the email up in our backend by submission ID.
+    let fetchEmailBySidInflight = false;
+    function fetchEmailBySid(sid) {
+        if (!sid || fetchEmailBySidInflight || originalEmail) return;
+        fetchEmailBySidInflight = true;
+        const url = APPS_SCRIPT_URL +
+            '?action=getEmailBySid&sid=' + encodeURIComponent(sid);
+        fetch(url, { method: 'GET' })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                console.log('[email-checker]   getEmailBySid →', JSON.stringify(data));
+                if (data && data.found && data.schoolEmail) {
+                    applyRestoredValue('getEmailBySid', data.schoolEmail);
+                }
+            })
+            .catch(function (err) {
+                console.log('[email-checker]   getEmailBySid failed:', err.message);
+            })
+            .then(function () { fetchEmailBySidInflight = false; });
+    }
 
     // Edit-mode restore: JotForm fires `populate` (sometimes AFTER `ready`)
     // to re-hydrate the widget with its saved value. This is how widget.html
