@@ -189,8 +189,10 @@
     const input  = document.getElementById('email');
     const status = document.getElementById('status');
 
-    let checkTimer  = null;
-    let lastChecked = { email: '', at: 0, found: false, info: null };
+    let checkTimer    = null;
+    let lastChecked   = { email: '', at: 0, found: false, info: null };
+    let cachedEmails  = null;          // lowercase array of all registered emails
+    let cachedEmailsPromise = null;    // in-flight fetch (avoid duplicate calls)
 
     // ─────────────────────────────────────────────────────────
     // Edit-mode signal — set when JotForm fires `ready` with a
@@ -199,22 +201,80 @@
     // ─────────────────────────────────────────────────────────
     let originalEmail = '';
 
-    // Best-effort secondary detection via parent URL (only used if
-    // the backend returns the submission ID).
+    // Best-effort edit-mode detection — tries every URL source we can read
+    // from inside an iframe. JotForm sometimes nests widgets two iframes deep,
+    // so referrer / top.location alone aren't reliable.
     const editingSubmissionId = (function () {
+        function matchEdit(s) {
+            if (!s) return null;
+            const m = String(s).match(/\/edit\/(\d+)/);
+            return m ? m[1] : null;
+        }
+        let id = null;
+
+        // 1. document.referrer
+        id = matchEdit(document.referrer); if (id) return id;
+
+        // 2. window.parent.location.href (may be cross-origin blocked)
+        try { id = matchEdit(window.parent.location.href); } catch (e) {}
+        if (id) return id;
+
+        // 3. window.top.location.href (same caveat)
+        try { id = matchEdit(window.top.location.href); } catch (e) {}
+        if (id) return id;
+
+        // 4. window.location.ancestorOrigins (gives origins only, not paths,
+        //    but if we see jotform.com in the chain we know we're embedded).
         try {
-            const ref = String(document.referrer || '');
-            const m = ref.match(/\/edit\/(\d+)/);
-            if (m) return m[1];
-        } catch (e) {}
-        try {
-            if (window.top && window.top.location && window.top.location.href) {
-                const m2 = String(window.top.location.href).match(/\/edit\/(\d+)/);
-                if (m2) return m2[1];
+            const ao = window.location.ancestorOrigins;
+            if (ao && ao.length) {
+                for (let i = 0; i < ao.length; i++) {
+                    // We can't extract the submission ID from origin alone,
+                    // but if we ever get a full URL via another mechanism
+                    // we know to trust it.
+                    console.log('[email-checker] ancestorOrigin[' + i + ']:', ao[i]);
+                }
             }
         } catch (e) {}
+
+        // 5. Query / hash on our own URL (in case JotForm passes it through)
+        id = matchEdit(window.location.search); if (id) return id;
+        id = matchEdit(window.location.hash);   if (id) return id;
+
         return null;
     })();
+
+    // JotForm can deliver the saved widget value in any of several shapes,
+    // depending on form version / page / device. Mirror widget.html and try
+    // every known path so edit-mode restore works across all devices.
+    function extractSavedValue(data) {
+        if (!data) return '';
+        if (typeof data === 'string') return data;
+        return (
+            data.value ||
+            (data.fieldData && data.fieldData.value) ||
+            (data.data && data.data.value) ||
+            ''
+        );
+    }
+
+    // Apply a restored value coming back from JotForm (either ready or
+    // populate). Sets the input + originalEmail and re-triggers a check.
+    function applyRestoredValue(source, raw) {
+        const val = String(raw || '').trim();
+        if (!val) return;
+        if (input.value && input.value.trim().toLowerCase() === val.toLowerCase()) {
+            originalEmail = val.toLowerCase();
+            console.log('[email-checker] %s: value already set, captured originalEmail =',
+                source, originalEmail);
+            return;
+        }
+        input.value = val;
+        originalEmail = val.toLowerCase();
+        console.log('[email-checker] %s: restored email "%s" (edit mode)', source, val);
+        sendUpward();
+        if (isValidEmail(input.value)) scheduleCheck(0);
+    }
 
     // ────────── Auto-resize iframe ──────────
     if (window.ResizeObserver) {
@@ -229,23 +289,62 @@
     }
 
     // ────────── JotForm lifecycle ──────────
-    JFCustomWidget.subscribe('ready', function (data) {
-        // ── DEBUG ──
+    JFCustomWidget.subscribe('ready', function () {
+        // JotForm calls ready() with varying signatures (single object, or
+        // formId+value strings). Inspect every argument and try all known
+        // value paths.
+        const args = arguments;
         console.log('[email-checker] ready event fired');
-        console.log('[email-checker] data:', JSON.stringify(data));
-        console.log('[email-checker] document.referrer:', document.referrer);
-        console.log('[email-checker] editingSubmissionId:', editingSubmissionId);
+        console.log('[email-checker]   arg[0]:', JSON.stringify(args[0]));
+        console.log('[email-checker]   arg[1]:', JSON.stringify(args[1]));
+        console.log('[email-checker]   document.referrer:', document.referrer);
+        console.log('[email-checker]   editingSubmissionId:', editingSubmissionId);
 
-        if (data && data.value) {
-            input.value = data.value;
-            originalEmail = String(data.value).trim().toLowerCase();
-            console.log('[email-checker] Edit mode detected. originalEmail =', originalEmail);
+        let saved = '';
+        for (let i = 0; i < args.length && !saved; i++) saved = extractSavedValue(args[i]);
+
+        if (saved) {
+            applyRestoredValue('ready', saved);
         } else {
-            console.log('[email-checker] No pre-filled value → treating as NEW submission');
+            console.log('[email-checker]   no pre-filled value yet (may still arrive via "populate")');
         }
+
+        // Kick off the pre-fetch of the full email list in the background so
+        // the local yes/no check is instant by the time the user types.
+        prefetchEmailList();
+
         sendUpward();
         if (isValidEmail(input.value)) scheduleCheck(0);
     });
+
+    // Edit-mode restore: JotForm fires `populate` (sometimes AFTER `ready`)
+    // to re-hydrate the widget with its saved value. This is how widget.html
+    // survives edit-from-a-new-device — without it, the widget thinks it's a
+    // fresh submission and shows the duplicate banner against itself.
+    JFCustomWidget.subscribe('populate', function (data) {
+        console.log('[email-checker] populate event fired');
+        console.log('[email-checker]   data:', JSON.stringify(data));
+        const saved = extractSavedValue(data);
+        if (saved) applyRestoredValue('populate', saved);
+    });
+
+    function prefetchEmailList() {
+        if (cachedEmails || cachedEmailsPromise) return cachedEmailsPromise;
+        const t0 = Date.now();
+        cachedEmailsPromise = fetch(APPS_SCRIPT_URL + '?action=listEmails', { method: 'GET' })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                cachedEmails = (data && data.emails || [])
+                    .map(function (s) { return String(s).trim().toLowerCase(); });
+                console.log('[email-checker] Pre-fetched %d emails in %dms',
+                    cachedEmails.length, Date.now() - t0);
+            })
+            .catch(function (err) {
+                console.log('[email-checker] Pre-fetch failed:', err.message);
+                cachedEmails = null;     // fall back to direct check
+            });
+        return cachedEmailsPromise;
+    }
 
     JFCustomWidget.subscribe('submit', function () {
         const email = input.value.trim();
@@ -283,6 +382,27 @@
     }
 
     async function doCheck(email) {
+        // ── PHASE 1: instant local check via the pre-fetched email list ──
+        // If a list is available, we can answer yes/no without a network roundtrip.
+        const lc = email.toLowerCase();
+        if (cachedEmails) {
+            const isDup = cachedEmails.indexOf(lc) !== -1;
+            console.log('[email-checker] Local check for "' + lc + '" → ' + (isDup ? 'DUPLICATE' : 'unique'));
+
+            if (!isDup) {
+                lastChecked = { email: email, at: Date.now(), found: false, info: null };
+                applyResult(false, null);
+                return;
+            }
+
+            // It's a duplicate — show the warning IMMEDIATELY with placeholder
+            // "Loading details…" while we fetch the full info in the background.
+            showDuplicateLoading();
+            lastChecked = { email: email, at: Date.now(), found: true, info: null };
+            sendUpward();           // mark invalid right away so submit is blocked
+        }
+
+        // ── PHASE 2: fetch full details (either no local list, or to fill banner) ──
         try {
             const url = APPS_SCRIPT_URL +
                 '?action=checkEmail&email=' + encodeURIComponent(email);
@@ -295,6 +415,34 @@
             setStatus('Could not check registrations (' + err.message + '). You can still submit.', '');
             sendUpward();
         }
+    }
+
+    // Show an instant "duplicate found, loading details…" banner so the user
+    // gets feedback before the full info fetch finishes.
+    function showDuplicateLoading() {
+        // Match the same currentEmail-is-own-submission check we do in applyResult,
+        // so editors don't see a flash of the warning.
+        const currentEmailLc = String(input.value || '').trim().toLowerCase();
+        if (originalEmail && currentEmailLc === originalEmail) {
+            setStatus('✓ You are editing your own submission — proceed normally.', 'ok');
+            return;
+        }
+        status.className = 'status';
+        status.innerHTML =
+            '<div class="dup-card">' +
+              '<div class="dup-header">' +
+                '<span class="icon">⚠️</span> Existing Registration Found' +
+              '</div>' +
+              '<div class="dup-body">' +
+                '<p class="dup-intro">A submission has already been registered using this email address.</p>' +
+                '<div class="dup-action">' +
+                  '<b>Please <u>edit your existing submission</u></b> instead of creating a new one.' +
+                '</div>' +
+                '<div style="font-size:12px; color:#6b7280; display:flex; align-items:center; gap:8px;">' +
+                  '<span class="spinner"></span> Loading submission details…' +
+                '</div>' +
+              '</div>' +
+            '</div>';
     }
 
     function applyResult(found, info) {
