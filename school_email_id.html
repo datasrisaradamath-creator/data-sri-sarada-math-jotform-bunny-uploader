@@ -203,8 +203,10 @@
 
     // Best-effort edit-mode detection — tries every URL source we can read
     // from inside an iframe. JotForm sometimes nests widgets two iframes deep,
-    // so referrer / top.location alone aren't reliable.
-    const editingSubmissionId = (function () {
+    // so referrer / top.location alone aren't reliable. Authoritative override
+    // happens later via JotForm's `ready` / `postMessage` payload (which
+    // contains `sid` + `isEditMode`).
+    let editingSubmissionId = (function () {
         function matchEdit(s) {
             if (!s) return null;
             const m = String(s).match(/\/edit\/(\d+)/);
@@ -284,14 +286,35 @@
             const str = (typeof raw === 'string') ? raw : JSON.stringify(raw);
             // High-volume / unrelated chatter from JotForm gets noisy; gate the
             // log so the console stays useful but we still see hits.
-            const interesting = /edit\/(\d+)|submissionID|submissionId|"value"/.test(str || '');
+            const interesting =
+                /isEditMode|"sid"|edit\/(\d+)|submissionID|submissionId|"value"/.test(str || '');
             if (interesting) {
                 console.log('[email-checker][postMessage] from', event.origin, '→', str.slice(0, 400));
             }
+
+            // 1. Authoritative signal: parsed object with sid + isEditMode
+            //    (JotForm forwards the same payload as the `ready` event).
+            let payloadObj = null;
+            if (typeof raw === 'object' && raw) payloadObj = raw;
+            else if (typeof raw === 'string') {
+                try { payloadObj = JSON.parse(raw); } catch (e) {}
+            }
+            const ctx = extractEditContext(payloadObj);
+            if (ctx && ctx.sid && !lateDetectedSid) {
+                lateDetectedSid = ctx.sid;
+                if (!editingSubmissionId) editingSubmissionId = ctx.sid;
+                console.log('[email-checker][postMessage] captured edit sid =', ctx.sid,
+                    'isEdit=', ctx.isEdit);
+                if (isValidEmail(input.value)) scheduleCheck(0);
+                return;
+            }
+
+            // 2. Fallback signal: a /edit/<id> URL inside the payload string.
             const m = (str || '').match(/\/edit\/(\d+)/);
             if (m && !lateDetectedSid) {
                 lateDetectedSid = m[1];
-                console.log('[email-checker][postMessage] captured editing submissionID =', lateDetectedSid);
+                if (!editingSubmissionId) editingSubmissionId = m[1];
+                console.log('[email-checker][postMessage] captured /edit/<id> =', lateDetectedSid);
                 if (isValidEmail(input.value)) scheduleCheck(0);
             }
         } catch (e) {}
@@ -309,6 +332,25 @@
             (data.data && data.data.value) ||
             ''
         );
+    }
+
+    // JotForm's `ready` payload (and matching postMessage from the parent)
+    // contains `isEditMode: "edit"` and `sid: "<submissionID>"` when the
+    // user is editing an existing submission. That's our authoritative
+    // edit-mode signal — far more reliable than URL parsing.
+    function extractEditContext(data) {
+        if (!data || typeof data !== 'object') return null;
+        const sidRaw =
+            data.sid ||
+            data.submissionId ||
+            data.submissionID ||
+            (data.fieldData && (data.fieldData.sid || data.fieldData.submissionID)) ||
+            (data.data && (data.data.sid || data.data.submissionID));
+        const sid = sidRaw ? String(sidRaw).trim() : '';
+        const editFlag = String(data.isEditMode || data.editMode || '').toLowerCase();
+        const isEdit = editFlag === 'edit' || editFlag === 'true' || editFlag === '1';
+        if (!sid && !isEdit) return null;
+        return { sid: sid || null, isEdit: isEdit };
     }
 
     // Apply a restored value coming back from JotForm (either ready or
@@ -351,7 +393,22 @@
         console.log('[email-checker]   arg[0]:', JSON.stringify(args[0]));
         console.log('[email-checker]   arg[1]:', JSON.stringify(args[1]));
         console.log('[email-checker]   document.referrer:', document.referrer);
-        console.log('[email-checker]   editingSubmissionId:', editingSubmissionId);
+        console.log('[email-checker]   editingSubmissionId (URL-based):', editingSubmissionId);
+
+        // ── Authoritative edit-mode detection ──
+        // JotForm's `ready` payload includes `isEditMode: "edit"` and
+        // `sid: "<submissionID>"` when the user is editing an existing
+        // submission. Promote whichever arg carries it to be our
+        // authoritative editingSubmissionId.
+        for (let i = 0; i < args.length; i++) {
+            const ctx = extractEditContext(args[i]);
+            if (ctx && (ctx.sid || ctx.isEdit)) {
+                if (ctx.sid) editingSubmissionId = ctx.sid;
+                console.log('[email-checker]   ready: edit context →',
+                    'sid=', ctx.sid, 'isEdit=', ctx.isEdit);
+                break;
+            }
+        }
 
         let saved = '';
         for (let i = 0; i < args.length && !saved; i++) saved = extractSavedValue(args[i]);
@@ -473,11 +530,18 @@
     // Show an instant "duplicate found, loading details…" banner so the user
     // gets feedback before the full info fetch finishes.
     function showDuplicateLoading() {
-        // Match the same currentEmail-is-own-submission check we do in applyResult,
-        // so editors don't see a flash of the warning.
+        // Mirror the self-edit checks from applyResult so editors don't see a
+        // flash of the warning OR have their email cleared before Phase 2.
+        // If we know we're in edit mode (sid from `ready`/postMessage), the
+        // duplicate is almost certainly the user's own submission — defer to
+        // Phase 2 for the definitive submissionID match.
         const currentEmailLc = String(input.value || '').trim().toLowerCase();
         if (originalEmail && currentEmailLc === originalEmail) {
             setStatus('✓ You are editing your own submission — proceed normally.', 'ok');
+            return;
+        }
+        if (editingSubmissionId || lateDetectedSid) {
+            setStatus('<span class="spinner"></span>Verifying your existing registration…', 'checking');
             return;
         }
         status.className = 'status';
