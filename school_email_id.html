@@ -230,12 +230,18 @@
 
     // ────────── JotForm lifecycle ──────────
     JFCustomWidget.subscribe('ready', function (data) {
+        // ── DEBUG ──
+        console.log('[email-checker] ready event fired');
+        console.log('[email-checker] data:', JSON.stringify(data));
+        console.log('[email-checker] document.referrer:', document.referrer);
+        console.log('[email-checker] editingSubmissionId:', editingSubmissionId);
+
         if (data && data.value) {
             input.value = data.value;
-            // A pre-filled value means JotForm loaded this widget with saved
-            // data — i.e., we're editing an existing submission. Remember
-            // the original email so we can recognise "the user's own entry".
             originalEmail = String(data.value).trim().toLowerCase();
+            console.log('[email-checker] Edit mode detected. originalEmail =', originalEmail);
+        } else {
+            console.log('[email-checker] No pre-filled value → treating as NEW submission');
         }
         sendUpward();
         if (isValidEmail(input.value)) scheduleCheck(0);
@@ -292,6 +298,14 @@
     }
 
     function applyResult(found, info) {
+        // ── DEBUG ──
+        console.log('[email-checker] applyResult called');
+        console.log('[email-checker]   found:', found);
+        console.log('[email-checker]   info:', JSON.stringify(info));
+        console.log('[email-checker]   current input value:', input.value);
+        console.log('[email-checker]   originalEmail (captured at ready):', originalEmail);
+        console.log('[email-checker]   editingSubmissionId (from URL):', editingSubmissionId);
+
         if (!found) {
             setStatus('✓ No previous registration with this email.', 'ok');
             sendUpward();
@@ -299,10 +313,6 @@
         }
 
         // ── If this matches the user's OWN submission, don't treat it as a duplicate ──
-        // Two signals to recognise "your own existing entry":
-        //   1. The email matches what JotForm pre-filled at ready (most reliable
-        //      — JotForm only pre-fills in edit mode).
-        //   2. The backend's submissionID matches the /edit/<id> in the parent URL.
         const currentEmailLc = String(input.value || '').trim().toLowerCase();
         const matchesOriginalEmail =
             originalEmail && currentEmailLc && currentEmailLc === originalEmail;
@@ -310,13 +320,19 @@
             editingSubmissionId && info && info.submissionID &&
             String(info.submissionID) === String(editingSubmissionId);
 
+        console.log('[email-checker]   currentEmailLc:', currentEmailLc);
+        console.log('[email-checker]   matchesOriginalEmail:', matchesOriginalEmail);
+        console.log('[email-checker]   matchesEditingSid:', matchesEditingSid);
+
         if (matchesOriginalEmail || matchesEditingSid) {
+            console.log('[email-checker]   → Skipping duplicate warning (own submission).');
             setStatus('✓ You are editing your own submission — proceed normally.', 'ok');
-            // Tell JotForm this is valid; don't clear the input.
             lastChecked.found = false;
             sendUpward();
             return;
         }
+
+        console.log('[email-checker]   → Showing duplicate warning + clearing field.');
 
         const rows = [];
         if (info.submitDate)   rows.push(['Originally submitted', info.submitDate]);
