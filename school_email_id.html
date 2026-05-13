@@ -201,127 +201,9 @@
     // ─────────────────────────────────────────────────────────
     let originalEmail = '';
 
-    // Best-effort edit-mode detection — tries every URL source we can read
-    // from inside an iframe. JotForm sometimes nests widgets two iframes deep,
-    // so referrer / top.location alone aren't reliable. Authoritative override
-    // happens later via JotForm's `ready` / `postMessage` payload (which
-    // contains `sid` + `isEditMode`).
-    let editingSubmissionId = (function () {
-        function matchEdit(s) {
-            if (!s) return null;
-            const m = String(s).match(/\/edit\/(\d+)/);
-            return m ? m[1] : null;
-        }
-        let id = null;
-
-        // 1. document.referrer
-        id = matchEdit(document.referrer); if (id) return id;
-
-        // 2. window.parent.location.href (may be cross-origin blocked)
-        try { id = matchEdit(window.parent.location.href); } catch (e) {}
-        if (id) return id;
-
-        // 3. window.top.location.href (same caveat)
-        try { id = matchEdit(window.top.location.href); } catch (e) {}
-        if (id) return id;
-
-        // 4. window.location.ancestorOrigins (gives origins only, not paths,
-        //    but if we see jotform.com in the chain we know we're embedded).
-        try {
-            const ao = window.location.ancestorOrigins;
-            if (ao && ao.length) {
-                for (let i = 0; i < ao.length; i++) {
-                    // We can't extract the submission ID from origin alone,
-                    // but if we ever get a full URL via another mechanism
-                    // we know to trust it.
-                    console.log('[email-checker] ancestorOrigin[' + i + ']:', ao[i]);
-                }
-            }
-        } catch (e) {}
-
-        // 5. Query / hash on our own URL (in case JotForm passes it through)
-        id = matchEdit(window.location.search); if (id) return id;
-        id = matchEdit(window.location.hash);   if (id) return id;
-
-        return null;
-    })();
-
-    // ─────────────────────────────────────────────────────────
-    // BOOT DIAGNOSTICS
-    // JotForm has been observed to deliver _nothing_ to this widget on edit
-    // (no `ready` data, no `populate`, no readable parent URL). Log every
-    // identity source the browser can give us so we can spot whichever one
-    // *does* carry the submission ID in your environment.
-    // ─────────────────────────────────────────────────────────
-    (function bootDiag() {
-        try { console.log('[email-checker][diag] location.href    :', window.location.href); } catch (e) {}
-        try { console.log('[email-checker][diag] location.search  :', window.location.search); } catch (e) {}
-        try { console.log('[email-checker][diag] location.hash    :', window.location.hash); } catch (e) {}
-        try { console.log('[email-checker][diag] location.pathname:', window.location.pathname); } catch (e) {}
-        try { console.log('[email-checker][diag] window.name      :', window.name); } catch (e) {}
-        try { console.log('[email-checker][diag] document.referrer:', document.referrer); } catch (e) {}
-        try {
-            const ao = window.location.ancestorOrigins;
-            if (ao) for (let i = 0; i < ao.length; i++) {
-                console.log('[email-checker][diag] ancestorOrigins[' + i + ']:', ao[i]);
-            }
-        } catch (e) {}
-        try { console.log('[email-checker][diag] parent.location.href:', window.parent.location.href); }
-        catch (e) { console.log('[email-checker][diag] parent.location.href: (blocked) ', e.message); }
-        try { console.log('[email-checker][diag] top.location.href   :', window.top.location.href); }
-        catch (e) { console.log('[email-checker][diag] top.location.href   : (blocked) ', e.message); }
-    })();
-
-    // A submission ID we discover late (via postMessage from the parent).
-    // Declared BEFORE the listener so we never hit a TDZ.
-    let lateDetectedSid = null;
-
-    // Listen for ANY postMessage — JotForm sometimes pushes form/submission
-    // context to widgets via window.postMessage. If we ever see a payload
-    // containing /edit/<id> or a submissionID, capture it as a late-arriving
-    // edit-mode signal and re-run the duplicate check.
-    window.addEventListener('message', function (event) {
-        try {
-            const raw = event.data;
-            const str = (typeof raw === 'string') ? raw : JSON.stringify(raw);
-            // High-volume / unrelated chatter from JotForm gets noisy; gate the
-            // log so the console stays useful but we still see hits.
-            const interesting =
-                /isEditMode|"sid"|edit\/(\d+)|submissionID|submissionId|"value"/.test(str || '');
-            if (interesting) {
-                console.log('[email-checker][postMessage] from', event.origin, '→', str.slice(0, 400));
-            }
-
-            // 1. Authoritative signal: parsed object with sid + isEditMode
-            //    (JotForm forwards the same payload as the `ready` event).
-            let payloadObj = null;
-            if (typeof raw === 'object' && raw) payloadObj = raw;
-            else if (typeof raw === 'string') {
-                try { payloadObj = JSON.parse(raw); } catch (e) {}
-            }
-            const ctx = extractEditContext(payloadObj);
-            if (ctx && ctx.sid && !lateDetectedSid) {
-                lateDetectedSid = ctx.sid;
-                if (!editingSubmissionId) editingSubmissionId = ctx.sid;
-                console.log('[email-checker][postMessage] captured edit sid =', ctx.sid,
-                    'isEdit=', ctx.isEdit);
-                // If the field is still empty and we never restored a value,
-                // ask the backend for the email tied to this submission.
-                if (!originalEmail && !input.value) fetchEmailBySid(ctx.sid);
-                if (isValidEmail(input.value)) scheduleCheck(0);
-                return;
-            }
-
-            // 2. Fallback signal: a /edit/<id> URL inside the payload string.
-            const m = (str || '').match(/\/edit\/(\d+)/);
-            if (m && !lateDetectedSid) {
-                lateDetectedSid = m[1];
-                if (!editingSubmissionId) editingSubmissionId = m[1];
-                console.log('[email-checker][postMessage] captured /edit/<id> =', lateDetectedSid);
-                if (isValidEmail(input.value)) scheduleCheck(0);
-            }
-        } catch (e) {}
-    });
+    // Set by the `ready` event when JotForm tells us we're editing an
+    // existing submission. Stays empty for fresh submissions.
+    let editingSubmissionId = '';
 
     // JotForm can deliver the saved widget value in any of several shapes,
     // depending on form version / page / device. Mirror widget.html and try
@@ -357,21 +239,22 @@
     }
 
     // Apply a restored value coming back from JotForm (either ready or
-    // populate). Sets the input + originalEmail and re-triggers a check.
+    // populate). Sets the input + originalEmail and reports the value as
+    // valid to JotForm. Does NOT trigger a duplicate-check — the saved email
+    // is by definition the user's own, so the check is pointless network
+    // work and may flash a "Checking…" status the user doesn't need to see.
+    // The input handler will run a check the moment the user actually edits.
     function applyRestoredValue(source, raw) {
         const val = String(raw || '').trim();
         if (!val) return;
         if (input.value && input.value.trim().toLowerCase() === val.toLowerCase()) {
             originalEmail = val.toLowerCase();
-            console.log('[email-checker] %s: value already set, captured originalEmail =',
-                source, originalEmail);
             return;
         }
         input.value = val;
         originalEmail = val.toLowerCase();
         console.log('[email-checker] %s: restored email "%s" (edit mode)', source, val);
         sendUpward();
-        if (isValidEmail(input.value)) scheduleCheck(0);
     }
 
     // ────────── Auto-resize iframe ──────────
@@ -392,25 +275,14 @@
         // formId+value strings). Inspect every argument and try all known
         // value paths.
         const args = arguments;
-        console.log('[email-checker] ready event fired');
-        console.log('[email-checker]   arg[0]:', JSON.stringify(args[0]));
-        console.log('[email-checker]   arg[1]:', JSON.stringify(args[1]));
-        console.log('[email-checker]   document.referrer:', document.referrer);
-        console.log('[email-checker]   editingSubmissionId (URL-based):', editingSubmissionId);
 
-        // ── Authoritative edit-mode detection ──
+        // ── Edit-mode detection ──
         // JotForm's `ready` payload includes `isEditMode: "edit"` and
         // `sid: "<submissionID>"` when the user is editing an existing
-        // submission. Promote whichever arg carries it to be our
-        // authoritative editingSubmissionId.
+        // submission. Capture the sid so applyResult can recognise self-edits.
         for (let i = 0; i < args.length; i++) {
             const ctx = extractEditContext(args[i]);
-            if (ctx && (ctx.sid || ctx.isEdit)) {
-                if (ctx.sid) editingSubmissionId = ctx.sid;
-                console.log('[email-checker]   ready: edit context →',
-                    'sid=', ctx.sid, 'isEdit=', ctx.isEdit);
-                break;
-            }
+            if (ctx && ctx.sid) { editingSubmissionId = ctx.sid; break; }
         }
 
         let saved = '';
@@ -418,52 +290,24 @@
 
         if (saved) {
             applyRestoredValue('ready', saved);
-        } else if (editingSubmissionId) {
-            // JotForm didn't ship the saved value, but we have the submission
-            // ID — pull the email from our backend and pre-fill the field.
-            console.log('[email-checker]   no value from JotForm; fetching by sid…');
-            fetchEmailBySid(editingSubmissionId);
         } else {
-            console.log('[email-checker]   no pre-filled value yet (may still arrive via "populate")');
+            console.log('[email-checker] ready: no pre-filled value (may still arrive via "populate")');
         }
 
         // Kick off the pre-fetch of the full email list in the background so
-        // the local yes/no check is instant by the time the user types.
+        // the local yes/no check is instant the first time the user types.
+        // We do NOT run an immediate duplicate check on the pre-filled value:
+        // in edit mode it's the user's own email by definition. Checking only
+        // happens via the input handler when the user actually changes it.
         prefetchEmailList();
-
         sendUpward();
-        if (isValidEmail(input.value)) scheduleCheck(0);
     });
 
-    // Edit-mode prefill fallback: when JotForm gives us a submission ID but
-    // no saved value, look the email up in our backend by submission ID.
-    let fetchEmailBySidInflight = false;
-    function fetchEmailBySid(sid) {
-        if (!sid || fetchEmailBySidInflight || originalEmail) return;
-        fetchEmailBySidInflight = true;
-        const url = APPS_SCRIPT_URL +
-            '?action=getEmailBySid&sid=' + encodeURIComponent(sid);
-        fetch(url, { method: 'GET' })
-            .then(function (res) { return res.json(); })
-            .then(function (data) {
-                console.log('[email-checker]   getEmailBySid →', JSON.stringify(data));
-                if (data && data.found && data.schoolEmail) {
-                    applyRestoredValue('getEmailBySid', data.schoolEmail);
-                }
-            })
-            .catch(function (err) {
-                console.log('[email-checker]   getEmailBySid failed:', err.message);
-            })
-            .then(function () { fetchEmailBySidInflight = false; });
-    }
-
-    // Edit-mode restore: JotForm fires `populate` (sometimes AFTER `ready`)
-    // to re-hydrate the widget with its saved value. This is how widget.html
-    // survives edit-from-a-new-device — without it, the widget thinks it's a
-    // fresh submission and shows the duplicate banner against itself.
+    // Safety net: JotForm fires `populate` (sometimes AFTER `ready`) to
+    // re-hydrate the widget with its saved value. In our current setup `ready`
+    // already carries the value, but this listener keeps us robust if the
+    // event ordering ever changes.
     JFCustomWidget.subscribe('populate', function (data) {
-        console.log('[email-checker] populate event fired');
-        console.log('[email-checker]   data:', JSON.stringify(data));
         const saved = extractSavedValue(data);
         if (saved) applyRestoredValue('populate', saved);
     });
@@ -570,7 +414,7 @@
             setStatus('✓ You are editing your own submission — proceed normally.', 'ok');
             return;
         }
-        if (editingSubmissionId || lateDetectedSid) {
+        if (editingSubmissionId) {
             setStatus('<span class="spinner"></span>Verifying your existing registration…', 'checking');
             return;
         }
@@ -602,42 +446,26 @@
     }
 
     function applyResult(found, info) {
-        // ── DEBUG ──
-        console.log('[email-checker] applyResult called');
-        console.log('[email-checker]   found:', found);
-        console.log('[email-checker]   info:', JSON.stringify(info));
-        console.log('[email-checker]   current input value:', input.value);
-        console.log('[email-checker]   originalEmail (captured at ready):', originalEmail);
-        console.log('[email-checker]   editingSubmissionId (from URL):', editingSubmissionId);
-
         if (!found) {
             setStatus('✓ No previous registration with this email.', 'ok');
             sendUpward();
             return;
         }
 
-        // ── If this matches the user's OWN submission, don't treat it as a duplicate ──
+        // ── If the duplicate is the user's OWN submission, skip the warning ──
         const currentEmailLc = String(input.value || '').trim().toLowerCase();
         const matchesOriginalEmail =
             originalEmail && currentEmailLc && currentEmailLc === originalEmail;
-        const effectiveEditingSid = editingSubmissionId || lateDetectedSid;
         const matchesEditingSid =
-            effectiveEditingSid && info && info.submissionID &&
-            String(info.submissionID) === String(effectiveEditingSid);
-
-        console.log('[email-checker]   currentEmailLc:', currentEmailLc);
-        console.log('[email-checker]   matchesOriginalEmail:', matchesOriginalEmail);
-        console.log('[email-checker]   matchesEditingSid:', matchesEditingSid);
+            editingSubmissionId && info && info.submissionID &&
+            String(info.submissionID) === String(editingSubmissionId);
 
         if (matchesOriginalEmail || matchesEditingSid) {
-            console.log('[email-checker]   → Skipping duplicate warning (own submission).');
             setStatus('✓ You are editing your own submission — proceed normally.', 'ok');
             lastChecked.found = false;
             sendUpward();
             return;
         }
-
-        console.log('[email-checker]   → Showing duplicate warning + clearing field.');
 
         const rows = [];
         if (info.submitDate)   rows.push(['Originally submitted', info.submitDate]);
