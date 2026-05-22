@@ -1298,8 +1298,12 @@
             entry.videoName = fields['video name'] || null;
             entry.videoId   = fields['video id']   || null;
 
-            // Extract libraryId from the Video URL if present
-            const urlMatch = (fields['video url'] || '').match(/play\/(\d+)\/([^\s]+)/);
+            // Extract libraryId from the Video URL if present.
+            // Accept BOTH `/play/<lib>/<id>` (historical format) and
+            // `/embed/<lib>/<id>` (current format, used so the widget's link
+            // matches the inline iframe). Stop at whitespace OR a query string
+            // so `?preload=true` etc. don't leak into the videoId.
+            const urlMatch = (fields['video url'] || '').match(/\/(?:play|embed)\/(\d+)\/([^\s?]+)/);
             if (urlMatch) {
                 entry.libraryId = urlMatch[1];
                 if (!entry.videoId) entry.videoId = urlMatch[2];
