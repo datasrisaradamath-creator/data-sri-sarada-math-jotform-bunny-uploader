@@ -310,7 +310,7 @@
         <div class="meta-row">
             <div><label>Gender<span>*</span></label>
                 <select class="gender" onchange="onFieldChange(this)">
-                    <option value="">Select</option><option value="Girl">Girl</option>
+                    <option value="">Select</option><option value="Boy">Boy</option><option value="Girl">Girl</option>
                 </select>
             </div>
             <div><label>Standard<span>*</span></label>
@@ -650,6 +650,7 @@
             if (!row) return;
             row.classList.add('has-error');
             markFieldEmpty(row.querySelector('.fName'));
+            markFieldEmpty(row.querySelector('.sName'));
             markFieldEmpty(row.querySelector('.gender'));
             markFieldEmpty(row.querySelector('.std'));
         });
@@ -1171,13 +1172,15 @@
         let allValid = true;
         document.querySelectorAll('#student-list .student-block').forEach((row, idx) => {
             const rowId = row.id;
-            const fName = row.querySelector('.fName').value.trim();
+            const fName  = row.querySelector('.fName').value.trim();
+            const sName  = row.querySelector('.sName').value.trim();
             const gender = row.querySelector('.gender').value;
-            const std = row.querySelector('.std').value;
+            const std    = row.querySelector('.std').value;
             const vData = videoData[rowId] || {};
             const vId = vData.videoId;
-            // Video is OPTIONAL — only the three text/select fields are required.
-            if (!fName || !gender || !std) {
+            // Required: First Name, Surname, Gender, Standard.
+            // Video is OPTIONAL.
+            if (!fName || !sName || !gender || !std) {
                 allValid = false;
                 missing.push(idx + 1);
             }
@@ -1186,7 +1189,7 @@
                 uid: rowId,
                 firstName: fName,
                 middleName: row.querySelector('.mName').value,
-                surname: row.querySelector('.sName').value,
+                surname: sName,
                 gender: gender,
                 standard: std,
                 division: row.querySelector('.div').value,
