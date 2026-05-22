@@ -1135,7 +1135,15 @@
         lines.push("");
 
         entries.forEach((s, i) => {
-            const fullName = [s.firstName, s.middleName, s.surname].filter(Boolean).join(' ').trim() || "(name not provided)";
+            // First Name + Surname are both REQUIRED. If either is missing
+            // we emit the literal string "(not provided)" so the JotForm Form
+            // Condition (Contains "(not provided)") fires and blocks the
+            // user from advancing past this page.
+            const hasFirst = !!String(s.firstName || '').trim();
+            const hasSur   = !!String(s.surname   || '').trim();
+            const fullName = (hasFirst && hasSur)
+                ? [s.firstName, s.middleName, s.surname].filter(Boolean).join(' ').trim()
+                : "(not provided)";
             const classDisplay = s.standard
                 ? (s.division ? `${s.standard} (Division ${s.division})` : `${s.standard}`)
                 : "(not provided)";
