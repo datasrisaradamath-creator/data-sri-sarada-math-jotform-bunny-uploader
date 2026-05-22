@@ -1130,7 +1130,10 @@
         // URL pattern used both inside the widget UI (line ~503) and in the
         // value we ship to JotForm — so the email's "Watch video" link goes
         // to the exact same player the form preview uses.
-        return `https://iframe.mediadelivery.net/embed/${libraryId}/${videoId}`;
+        // preload=true makes the click-to-play instant (recipient opens a
+        // single tab from the email, so the bandwidth concern from the
+        // multi-iframe widget side doesn't apply).
+        return `https://iframe.mediadelivery.net/embed/${libraryId}/${videoId}?preload=true`;
     }
 
     // Returns a human-readable, multi-line representation of all entries.
