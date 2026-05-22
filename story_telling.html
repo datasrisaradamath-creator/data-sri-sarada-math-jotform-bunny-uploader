@@ -518,7 +518,7 @@
                         ${justUploaded ? `
                             <div class="thumbnail-status" id="ts-${uid}">
                                 <span class="dot"></span>
-                                Video is processing — preview will be ready shortly...
+                                Video uploaded successfully — preview will appear in 1-5 mins. You can continue and submit the form; processing happens in the background.
                             </div>
                         ` : `
                             <div class="thumbnail-status" id="ts-${uid}" style="display:none;"></div>
@@ -1121,7 +1121,12 @@
     // for use as `<iframe src="...">` to embed.
     function buildVideoUrl(libraryId, videoId) {
         if (!libraryId || !videoId) return "";
-        return `https://iframe.mediadelivery.net/play/${libraryId}/${videoId}`;
+        // Use Bunny's `/embed/` URL (with Early-Play this loads the original
+        // file instantly while encoding completes in the background). Same
+        // URL pattern used both inside the widget UI (line ~503) and in the
+        // value we ship to JotForm — so the email's "Watch video" link goes
+        // to the exact same player the form preview uses.
+        return `https://iframe.mediadelivery.net/embed/${libraryId}/${videoId}`;
     }
 
     // Returns a human-readable, multi-line representation of all entries.
