@@ -497,16 +497,14 @@
 
         if (videoData[uid]?.videoId) {
             const v = videoData[uid];
-            // autoplay=false   — critical: a school editing a multi-student form
-            //                    would otherwise see every student's video
-            //                    auto-play at once. Always-on stays OFF.
-            // preload=metadata — fetches just video metadata (~50 KB) per iframe,
-            //                    NOT the full video. Keeps first-play fast
-            //                    (decoder primed, dimensions known) while
-            //                    avoiding the bandwidth blast you'd get with
-            //                    preload=true on a 10-student edit screen.
+            // autoplay=false stops the player from auto-starting on form edit/persistence restore
+            // (critical when a school is reviewing multiple students — we never want N videos
+            // playing simultaneously).
+            // preload=true tells Bunny to start fetching the video bytes as soon as the iframe
+            // mounts, so the play button responds instantly when the user clicks it (instead of
+            // the "click → wait while video loads → play" delay you get with preload=false).
             const playerUrl = (v.libraryId && v.videoId)
-                ? `https://iframe.mediadelivery.net/embed/${v.libraryId}/${v.videoId}?autoplay=false&preload=metadata`
+                ? `https://iframe.mediadelivery.net/embed/${v.libraryId}/${v.videoId}?autoplay=false&preload=true`
                 : '';
             area.classList.remove('disabled');
             area.innerHTML = `
@@ -1132,16 +1130,7 @@
         // URL pattern used both inside the widget UI (line ~503) and in the
         // value we ship to JotForm — so the email's "Watch video" link goes
         // to the exact same player the form preview uses.
-        //
-        // autoplay=false  → safety: even though this URL only ever opens in a
-        //                   stand-alone tab from the email, be explicit so no
-        //                   downstream surprise auto-plays the video.
-        // preload=true    → recipient clicks "Watch video" deliberately and
-        //                   opens a single tab; preload the full video so the
-        //                   play click is instant rather than "click → buffer →
-        //                   play". Only one video plays in this context, so the
-        //                   bandwidth concern from the widget side doesn't apply.
-        return `https://iframe.mediadelivery.net/embed/${libraryId}/${videoId}?autoplay=false&preload=true`;
+        return `https://iframe.mediadelivery.net/embed/${libraryId}/${videoId}`;
     }
 
     // Returns a human-readable, multi-line representation of all entries.
