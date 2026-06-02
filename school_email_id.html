@@ -539,8 +539,10 @@
     // ────────── Helpers ──────────
     function sendUpward() {
         const email = input.value.trim();
-        const valid = isValidEmail(email) && !lastChecked.found;
-        try { JFCustomWidget.sendData({ value: email, valid: valid }); } catch (e) {}
+        const validFormat = isValidEmail(email);
+        const isClean     = validFormat && !lastChecked.found;
+        const value       = isClean ? email : '';
+        try { JFCustomWidget.sendData({ value: value, valid: isClean }); } catch (e) {}
     }
 
     function setStatus(html, cls) {
