@@ -723,7 +723,7 @@
                     videoId: savedData.videoId,
                     libraryId: savedData.libraryId || null,
                     videoName: savedData.videoName || null,
-                    hash: savedData.hash || null   // restored from local storage if present
+                    hash: savedData.hash || null
                 };
             }
         }
@@ -909,22 +909,8 @@
         refreshBannerState();
     }
 
-    // ---------- File-hash dedup helpers ----------
-    //
-    // Each video uploaded in this session must be unique. We compute SHA-256
-    // of the file BEFORE the upload starts and store it in videoData[uid].hash.
-    // If another student already has the same hash, we block the upload and
-    // tell the user which student it duplicates.
-    //
-    // Why hash and not filename: two students could both have a "video.mp4"
-    // file — different content, same name. Hashing the bytes catches actual
-    // duplicates regardless of name.
-    //
-    // Limitation: in edit mode, restored entries arrive WITHOUT a hash
-    // (because we don't have the original file — only the Bunny videoId).
-    // A brand-new upload that matches a restored video byte-for-byte would
-    // pass through. The common case ("oops, I picked the same file twice
-    // in the same session") IS still caught.
+    // SHA-256 dedup: every uploaded video must be unique across the form
+    // (across sessions too — the hash is persisted in formatPretty's output).
     async function computeFileHash(file) {
         const buffer = await file.arrayBuffer();
         const digest = await crypto.subtle.digest('SHA-256', buffer);
@@ -932,13 +918,29 @@
         return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
     }
 
-    function findDuplicateUid(hash, currentUid) {
-        if (!hash) return null;
+    // Returns the uid of an existing video that matches the candidate,
+    // or null if no duplicate is found. Match precedence:
+    //   1. SHA-256 hash — definitive (same bytes, same file).
+    //   2. videoName (case-insensitive) — only consulted when at least one
+    //      side LACKS a hash (e.g. legacy submissions saved before the hash
+    //      was persisted). When both sides have hashes and they differ, we
+    //      trust the hash and DO NOT block on a name collision.
+    function findDuplicateUid(hash, name, currentUid) {
+        if (!hash && !name) return null;
+        const nameLc = (name || '').trim().toLowerCase();
         const uids = Object.keys(videoData);
         for (let i = 0; i < uids.length; i++) {
             const u = uids[i];
             if (u === currentUid) continue;
-            if (videoData[u] && videoData[u].hash === hash) return u;
+            const v = videoData[u];
+            if (!v) continue;
+
+            if (hash && v.hash && v.hash === hash) return u;
+
+            if (nameLc && v.videoName && String(v.videoName).trim().toLowerCase() === nameLc) {
+                const bothHashesPresent = hash && v.hash;
+                if (!bothHashesPresent) return u;
+            }
         }
         return null;
     }
@@ -950,11 +952,9 @@
         const sName = row.querySelector('.sName').value.trim();
         const full = [fName, sName].filter(Boolean).join(' ');
         if (full) return full;
-        // Badge already reads "Student N" (set by refreshIndices), use it as-is.
         const badge = row.querySelector('.student-count-badge');
         return (badge && badge.textContent && badge.textContent.trim()) || 'another student';
     }
-    // ---------- end file-hash dedup ----------
 
     async function handleUpload(uid, file) {
         const row = findRow(uid);
@@ -978,20 +978,15 @@
             return;
         }
 
-        // ── Duplicate-content check ──
-        // Hash the file (SHA-256) and compare against every other student's
-        // hash in this session. Show a clear error if it duplicates an
-        // already-uploaded video, otherwise carry on.
+        // Use the original filename (without extension) as the video title.
+        const videoTitle = (file.name || 'video').replace(/\.[^/.]+$/, '');
+
         const area = document.getElementById("up-" + uid);
         area.innerHTML = `Checking file...`;
         let fileHash = '';
-        try {
-            fileHash = await computeFileHash(file);
-        } catch (hashErr) {
-            console.warn('Hash computation failed:', hashErr);
-            // Fall through — we can't dedup but the upload should still work.
-        }
-        const dupUid = findDuplicateUid(fileHash, uid);
+        try { fileHash = await computeFileHash(file); }
+        catch (hashErr) { console.warn('Hash computation failed:', hashErr); }
+        const dupUid = findDuplicateUid(fileHash, videoTitle, uid);
         if (dupUid) {
             const dupName = studentLabelForRow(dupUid);
             alert(
@@ -1002,9 +997,6 @@
             renderUploadArea(row);
             return;
         }
-
-        // Use the original filename (without extension) as the video title.
-        const videoTitle = (file.name || 'video').replace(/\.[^/.]+$/, '');
 
         videoData[uid] = { ...(videoData[uid] || {}), uploading: true, hash: fileHash };
         area.innerHTML = `Uploading... <span id="p-${uid}">0%</span>`;
@@ -1114,15 +1106,18 @@
             return;
         }
 
-        // ── Duplicate-content check (same logic as initial upload) ──
-        // Note: passing `uid` excludes the row we're replacing from the
-        // comparison — so re-uploading the same file to the SAME student
-        // is allowed (it's just a no-op replace), but uploading a file
-        // that another student already has is blocked.
+        // Snapshot of the current (about-to-be-replaced) video.
+        const oldVideo = { ...(videoData[uid] || {}) };
+
+        // Use the original filename (without extension) as the video title.
+        const videoTitle = (file.name || 'video').replace(/\.[^/.]+$/, '');
+
+        // Passing `uid` excludes the row being replaced from comparison,
+        // so re-uploading the same file for the SAME student is allowed.
         let fileHash = '';
         try { fileHash = await computeFileHash(file); }
         catch (hashErr) { console.warn('Hash computation failed:', hashErr); }
-        const dupUid = findDuplicateUid(fileHash, uid);
+        const dupUid = findDuplicateUid(fileHash, videoTitle, uid);
         if (dupUid) {
             const dupName = studentLabelForRow(dupUid);
             alert(
@@ -1132,12 +1127,6 @@
             cancelReplaceUpload(uid);
             return;
         }
-
-        // Snapshot of the current (about-to-be-replaced) video.
-        const oldVideo = { ...(videoData[uid] || {}) };
-
-        // Use the original filename (without extension) as the video title.
-        const videoTitle = (file.name || 'video').replace(/\.[^/.]+$/, '');
 
         const area = row.querySelector('.upload-area');
         area.id = "up-" + uid;
@@ -1262,6 +1251,8 @@
             lines.push(`Video Name: ${s.videoName || '(not uploaded)'}`);
             lines.push(`Video ID: ${s.videoId || '(not uploaded)'}`);
             if (videoUrl) lines.push(`Video URL: ${videoUrl}`);
+            // Persist hash so dedup works across sessions / edit-from-different-device.
+            if (s.hash) lines.push(`Video Hash: ${s.hash}`);
         });
 
         return lines.join("\n");
@@ -1309,9 +1300,6 @@
                 videoId: vId || null,
                 videoName: vData.videoName || null,
                 libraryId: vData.libraryId || null,
-                // hash is included so dedup keeps working across an in-tab reload
-                // (sessionStorage / window.name path). It's NOT in the pretty-text
-                // value sent to JotForm so it doesn't leak into emails or sheets.
                 hash: vData.hash || null
             });
         });
@@ -1394,12 +1382,10 @@
 
             entry.videoName = fields['video name'] || null;
             entry.videoId   = fields['video id']   || null;
+            entry.hash      = fields['video hash'] || null;
 
-            // Extract libraryId from the Video URL if present.
-            // Accept BOTH `/play/<lib>/<id>` (historical format) and
-            // `/embed/<lib>/<id>` (current format, used so the widget's link
-            // matches the inline iframe). Stop at whitespace OR a query string
-            // so `?preload=true` etc. don't leak into the videoId.
+            // libraryId pulled from Video URL (`/play/...` or `/embed/...`).
+            // Stops at `?` so `?preload=true` etc. don't leak into the videoId.
             const urlMatch = (fields['video url'] || '').match(/\/(?:play|embed)\/(\d+)\/([^\s?]+)/);
             if (urlMatch) {
                 entry.libraryId = urlMatch[1];
