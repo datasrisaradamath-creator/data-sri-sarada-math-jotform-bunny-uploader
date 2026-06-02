@@ -337,8 +337,12 @@
     });
 
     // ────────── Input handler ──────────
+    let invalidHintTimer = null;
+    const INVALID_HINT_DELAY_MS = 700;
+
     input.addEventListener('input', function () {
         clearTimeout(checkTimer);
+        clearTimeout(invalidHintTimer);
         clearStatus();
         input.classList.remove('invalid');
 
@@ -346,12 +350,25 @@
         if (!email) { sendUpward(); return; }
 
         if (!isValidEmail(email)) {
-            input.classList.add('invalid');
-            setStatus('Please enter a valid email address.', 'invalid');
             sendUpward();
+            invalidHintTimer = setTimeout(function () {
+                input.classList.add('invalid');
+                setStatus('Please enter a valid email address.', 'invalid');
+            }, INVALID_HINT_DELAY_MS);
             return;
         }
         scheduleCheck(DEBOUNCE_MS);
+    });
+
+    input.addEventListener('blur', function () {
+        const email = input.value.trim();
+        if (!email) return;                  // empty: handled by JotForm's "required" check
+        if (!isValidEmail(email)) {
+            clearTimeout(invalidHintTimer);
+            input.classList.add('invalid');
+            setStatus('Please enter a valid email address.', 'invalid');
+            sendUpward();
+        }
     });
 
     function scheduleCheck(delay) {
