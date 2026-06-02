@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How to fill — Patriotic Group Song</title>
+
+<!-- JotForm custom widget bridge -->
+<script src="https://cdn.jotfor.ms/s/umd/latest/for-custom-widgets.js"></script>
+
+<style>
+    html, body { margin: 0; padding: 0; }
+    body {
+        font-family: Inter, Arial, sans-serif;
+        background: transparent;
+        color: #5b4a16;
+    }
+
+    /* Same yellow/saffron palette as the student widget's instructions-box
+       so the card visually belongs next to the configurable list below it. */
+    .instructions-box {
+        background: #fffbe6;
+        border: 1px solid #f1d56e;
+        border-left: 4px solid #f5a623;
+        border-radius: 8px;
+        padding: 16px 18px;
+        font-size: 14px;
+        line-height: 1.55;
+        color: #5b4a16;
+    }
+    .instructions-box h4 {
+        margin: 0 0 10px 0;
+        font-size: 15px;
+        color: #7a5b0d;
+        font-weight: 700;
+    }
+    .section-title {
+        margin: 14px 0 6px 0;
+        font-weight: 700;
+        font-size: 14px;
+        color: #7a5b0d;
+    }
+    .instructions-box ul {
+        margin: 0;
+        padding-left: 22px;
+    }
+    .instructions-box li {
+        margin-bottom: 6px;
+    }
+    .instructions-box .warn {
+        color: #b54708;
+        font-weight: 700;
+    }
+    .instructions-box .optional {
+        color: #2d5f1f;
+        font-weight: 700;
+    }
+    .instructions-box .key {
+        background: #ffffff;
+        border: 1px solid #e0c970;
+        border-radius: 4px;
+        padding: 1px 7px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #5b4a16;
+        display: inline-block;
+    }
+    .instructions-box .note {
+        margin-top: 10px;
+        padding: 8px 12px;
+        background: #fff1d6;
+        border-radius: 6px;
+        font-size: 13px;
+        color: #b54708;
+        font-weight: 600;
+    }
+</style>
+</head>
+
+<body>
+    <div class="instructions-box">
+        <h4>How to fill this section</h4>
+        <p style="margin:0 0 8px 0;">
+            This competition has <b>two parts</b>: a Student section (singers) and
+            an optional Musician section (instrumentalists).
+        </p>
+
+        <div class="section-title">Students (required)</div>
+        <ul>
+            <li>
+                Mandatory fields (marked <span class="warn">*</span> in red):
+                <b>First Name</b>, <b>Surname</b>, <b>Gender</b>, and <b>Standard</b>.
+                Middle Name and Division are optional.
+            </li>
+            <li>
+                Up to <b>10 students</b> can be entered.
+                Click <span class="key">Add Student</span> to add a row, and the
+                dustbin button at the right edge of a row to remove it.
+            </li>
+        </ul>
+
+        <div class="section-title">Musicians <span class="optional">(optional)</span></div>
+        <ul>
+            <li>
+                Musicians are <b>optional</b> — leave the section empty if you have none as of now.
+            </li>
+            <li>
+                If you DO add a musician row, fill appropriate fields for completeness:
+            </li>
+            <li>
+                Up to <b>2 musicians</b> can be entered.
+                Click <span class="key">+ Add Student</span> to add a row, and the
+                dustbin button at the right edge of a row to remove it.
+            </li>
+        </ul>
+
+        <div class="note">
+            You won't be able to proceed to the next page if any added student
+            has a mandatory field left blank.
+        </div>
+    </div>
+
+<script>
+    function resize() {
+        try {
+            JFCustomWidget.requestFrameResize({
+                width: '100%',
+                height: document.body.offsetHeight + 8
+            });
+        } catch (e) {}
+    }
+    if (window.ResizeObserver) {
+        new ResizeObserver(resize).observe(document.body);
+    }
+
+    JFCustomWidget.subscribe('ready', function () {
+        resize();
+        try { JFCustomWidget.sendData({ value: '', valid: true }); } catch (e) {}
+    });
+    JFCustomWidget.subscribe('submit', function () {
+        try { JFCustomWidget.sendSubmit({ value: '', valid: true }); } catch (e) {}
+    });
+</script>
+
+</body>
+</html>
