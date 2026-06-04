@@ -604,12 +604,13 @@
     // banner stays hidden — we don't want to nag a user who's still filling
     // the form for the first time.
     // Unified validation renderer.
-    //   • Duplicates are surfaced IMMEDIATELY — the user has two complete, colliding
-    //     rows, so there's no reason to wait for a proceed attempt.
-    //   • Missing-field errors only show after submitAttempted, so we don't nag a
-    //     user who is still filling the form for the first time.
+    //   • Duplicates are surfaced IMMEDIATELY (live) — the user has two complete,
+    //     colliding rows, so there's no reason to wait.
+    //   • Missing-field "required" errors are ONLY rendered on a Next/submit
+    //     attempt (includeMissing), never live on each keystroke.
     function renderValidation(opts) {
         const scroll = !!(opts && opts.scroll);
+        const includeMissing = !!(opts && opts.includeMissing);
         const banner = document.getElementById('widget-error-banner');
         const rows   = document.querySelectorAll('#student-list .student-block');
         const state  = collectState();
@@ -617,7 +618,7 @@
 
         const messages = [];
 
-        if (submitAttempted) {
+        if (includeMissing) {
             if (state.count === 0) {
                 messages.push('Please add at least one student before continuing.');
             } else if (state.missing.length === 1) {
@@ -1556,7 +1557,7 @@
             state.allValid, state.count, state.missing);
 
         submitAttempted = true;
-        renderValidation({ scroll: true });
+        renderValidation({ scroll: true, includeMissing: true });
 
         JFCustomWidget.sendSubmit({
             valid: state.allValid,

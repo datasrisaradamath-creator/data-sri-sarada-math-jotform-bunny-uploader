@@ -340,10 +340,13 @@
             w.appendChild(b);
         }
     }
-    // Unified validation renderer. Duplicates show IMMEDIATELY; missing-field
-    // errors only after a proceed attempt (submitAttempted).
+    // Unified validation renderer.
+    //   • Duplicates show IMMEDIATELY (live), as soon as two rows fully match.
+    //   • Missing-field "required" errors are ONLY rendered on a Next/submit
+    //     attempt (includeMissing), never live on each keystroke.
     function renderValidation(opts) {
         const scroll = !!(opts && opts.scroll);
+        const includeMissing = !!(opts && opts.includeMissing);
         const banner = document.getElementById('widget-error-banner');
         const rows = document.querySelectorAll('#student-list .student-block');
         const state = collectState();
@@ -351,7 +354,7 @@
 
         const messages = [];
 
-        if (submitAttempted) {
+        if (includeMissing) {
             if (state.count === 0) {
                 messages.push('Please add at least one student before continuing.');
             } else if (state.missing.length === 1) {
@@ -701,7 +704,7 @@
         const state = collectState();
         persistAll(state.payload);
         submitAttempted = true;
-        renderValidation({ scroll: true });
+        renderValidation({ scroll: true, includeMissing: true });
         JFCustomWidget.sendSubmit({ valid: state.allValid, value: state.prettyValue });
     });
 </script>
