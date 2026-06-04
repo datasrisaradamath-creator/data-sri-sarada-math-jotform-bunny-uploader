@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>How to fill — Patriotic Group Song</title>
+<title>How to fill — Drawing</title>
 
 <!-- JotForm custom widget bridge -->
 <script src="https://cdn.jotfor.ms/s/umd/latest/for-custom-widgets.js"></script>
@@ -16,8 +16,8 @@
         color: #5b4a16;
     }
 
-    /* Same yellow/saffron palette as the student widget's instructions-box
-       so the card visually belongs next to the configurable list below it. */
+    /* Matches the .instructions-box look used inside the student widget so
+       this card visually "belongs" next to the configurable list below it. */
     .instructions-box {
         background: #fffbe6;
         border: 1px solid #f1d56e;
@@ -34,12 +34,6 @@
         color: #7a5b0d;
         font-weight: 700;
     }
-    .section-title {
-        margin: 14px 0 6px 0;
-        font-weight: 700;
-        font-size: 14px;
-        color: #7a5b0d;
-    }
     .instructions-box ul {
         margin: 0;
         padding-left: 22px;
@@ -49,10 +43,6 @@
     }
     .instructions-box .warn {
         color: #b54708;
-        font-weight: 700;
-    }
-    .instructions-box .optional {
-        color: #2d5f1f;
         font-weight: 700;
     }
     .instructions-box .key {
@@ -80,12 +70,6 @@
 <body>
     <div class="instructions-box">
         <h4>How to fill this section</h4>
-        <p style="margin:0 0 8px 0;">
-            This competition has <b>two parts</b>: a Student section (singers) and
-            an optional Musician section (instrumentalists).
-        </p>
-
-        <div class="section-title">Students (required)</div>
         <ul>
             <li>
                 Mandatory fields (marked <span class="warn">*</span> in red):
@@ -93,9 +77,12 @@
                 Middle Name and Division are optional.
             </li>
             <li>
-                Up to <b>10 students</b> can be entered.
                 Click <span class="key">+ Add Student</span> to add a row.
-                Click <span class="key">Delete Student</span> at the right edge to remove a row.
+                You can add up to <b>25 students</b>.
+            </li>
+            <li>
+                To remove a student, click <span class="key">Delete Student</span>
+                at the right edge of that row.
             </li>
             <li>
                 Each student must be unique — two rows with the same First Name,
@@ -104,26 +91,15 @@
             </li>
         </ul>
 
-        <div class="section-title">Musicians <span class="optional">(optional)</span></div>
-        <ul>
-            <li>
-                Musicians are <b>optional</b> — leave the section empty if you have none.
-            </li>
-            <li>
-                Up to <b>2 musicians</b> can be entered.
-                Click <span class="key">+ Add Musician</span> to add a row.
-                Click <span class="key">Delete Musician</span> at the right edge to remove a row.
-            </li>
-        </ul>
-
         <div class="note">
             You won't be able to proceed if any student row has a mandatory field
-            left blank or if duplicate student entries are detected. Either complete
+            left blank or if duplicate entries are detected. Either complete
             the row or click <span style="font-weight:600;">Delete Student</span> to remove it.
         </div>
     </div>
 
 <script>
+    // Auto-resize the JotForm iframe to the box's height so nothing is clipped.
     function resize() {
         try {
             JFCustomWidget.requestFrameResize({
@@ -136,6 +112,8 @@
         new ResizeObserver(resize).observe(document.body);
     }
 
+    // Informational widget — no user input, no value to send. We still
+    // subscribe to ready/submit so JotForm doesn't treat the widget as broken.
     JFCustomWidget.subscribe('ready', function () {
         resize();
         try { JFCustomWidget.sendData({ value: '', valid: true }); } catch (e) {}

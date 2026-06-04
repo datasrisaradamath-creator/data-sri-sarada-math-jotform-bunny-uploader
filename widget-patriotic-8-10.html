@@ -30,7 +30,6 @@
         }
         .section-divider hr { flex: 1; border: none; border-top: 1px solid #e2e8f0; }
         .section-divider span { font-size: 13px; font-weight: 700; white-space: nowrap; }
-        .section-optional { font-size: 11px; color: #718096; font-weight: 400; margin-left: 4px; }
 
         .name-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
         .meta-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; align-items: end; }
@@ -111,7 +110,7 @@
     <!-- Musician section (optional) -->
     <div class="section-divider">
         <hr>
-        <span>Musician Details<span class="section-optional">(Optional · max 2)</span></span>
+        <span>Musician Details</span>
         <hr>
     </div>
     <div id="musician-list"></div>
@@ -158,7 +157,7 @@
             <div><label>Surname</label><input type="text" class="mSName" oninput="sync()"></div>
         </div>
         <div class="meta-row musician-meta">
-            <div><label>Participant</label><input type="text" class="mPart" oninput="sync()"</div>
+            <div><label>Participant</label><input type="text" class="mPart" oninput="sync()"></div>
             <div><label>Gender</label>
                 <select class="mGender" disabled style="color:#555;background:#f0f0f0;">
                     <option value="Girl">Girl</option>
@@ -246,9 +245,7 @@
         const rows = document.querySelectorAll('#student-list .student-block');
         rows.forEach((row, i) => {
             row.querySelector('.student-count-badge').innerText = `Student ${i + 1}`;
-            row.querySelector('.del-col').innerHTML = (rows.length > 1)
-                ? `<button type="button" class="ref-delete-btn" onclick="removeRow('${row.id}')">${TRASH_ICON} Delete Student</button>`
-                : '';
+            row.querySelector('.del-col').innerHTML = `<button type="button" class="ref-delete-btn" onclick="removeRow('${row.id}')" ${rows.length <= 1 ? 'style="visibility:hidden;"' : ''}>${TRASH_ICON} Delete Student</button>`;
         });
         const count = rows.length;
         const atLimit = count >= MAX_STUDENTS;
