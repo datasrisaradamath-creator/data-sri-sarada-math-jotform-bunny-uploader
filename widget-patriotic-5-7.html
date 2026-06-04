@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="//js.jotform.com/JotFormCustomWidget.min.js"></script>
+    <style>
+        html, body { margin: 0; padding: 0; background: transparent; overflow-x: hidden; }
+        body { font-family: -apple-system, sans-serif; padding: 20px 2px 12px 2px; }
+
+        #widget-wrap { display: flex; flex-direction: column; gap: 20px; width: 100%; box-sizing: border-box; }
+
+        #student-list, #musician-list { display: flex; flex-direction: column; gap: 30px; width: 100%; }
+
+        .student-block, .musician-block {
+            position: relative; padding: 25px 8px 20px 8px;
+            border: 1px solid #e1e4e8; border-radius: 12px;
+            background: #ffffff; box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            display: flex; flex-direction: column; gap: 18px; box-sizing: border-box;
+        }
+        .musician-block { border-color: #c3dafe; background: #f8faff; }
+
+        .student-count-badge {
+            position: absolute; top: -14px; left: 15px;
+            background: #4a5568; color: white;
+            padding: 4px 14px; border-radius: 20px;
+            font-size: 11px; font-weight: bold; z-index: 10;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .musician-block .student-count-badge { background: #3b82f6; }
+
+        .section-divider {
+            display: flex; align-items: center; gap: 12px;
+            margin: 8px 0 4px 0; color: #4a5568;
+        }
+        .section-divider hr { flex: 1; border: none; border-top: 1px solid #e2e8f0; }
+        .section-divider span { font-size: 13px; font-weight: 700; white-space: nowrap; }
+        .section-optional { font-size: 11px; color: #718096; font-weight: 400; margin-left: 4px; }
+
+        .name-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+        .meta-row { display: grid; grid-template-columns: 1fr 1fr 100px auto; gap: 12px; align-items: end; }
+        .musician-meta { grid-template-columns: 1fr 1fr 1fr 100px auto; }
+
+        @media screen and (max-width: 650px) {
+            .name-row, .meta-row, .musician-meta { grid-template-columns: 1fr; }
+            .ref-delete-btn { width: 100%; justify-content: center; }
+        }
+
+        label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px; color: #333; text-transform: uppercase; }
+        label span { color: #d73a49; }
+
+        input, select {
+            width: 100%; padding: 10px; border: 1px solid #ccd0d5; border-radius: 6px;
+            font-size: 14px; background: #fafbfc; height: 40px; box-sizing: border-box;
+        }
+
+        .ref-delete-btn {
+            background: #f7fafc; color: #e53e3e; border: 1px solid #feb2b2;
+            border-radius: 6px; cursor: pointer; display: flex; align-items: center;
+            gap: 6px; height: 40px; padding: 0 12px; font-size: 13px; font-weight: 600;
+        }
+
+        .footer-row {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 12px; flex-wrap: wrap;
+        }
+        .btn-add {
+            background: #4a5568; color: white; border: none;
+            padding: 14px 28px; border-radius: 8px; cursor: pointer;
+            font-weight: bold; font-size: 14px; width: fit-content; margin-bottom: 10px;
+        }
+        .btn-add:hover:not(:disabled) { background: #2d3748; }
+        .btn-add:disabled { background: #a0aec0; cursor: not-allowed; opacity: 0.7; }
+        .btn-add-musician { background: #3b82f6; }
+        .btn-add-musician:hover:not(:disabled) { background: #2563eb; }
+
+        .student-count-display { font-size: 13px; color: #4a5568; font-weight: 600; }
+        .student-count-display .at-limit { color: #b54708; }
+        .musician-count-display { font-size: 13px; color: #3b82f6; font-weight: 600; }
+
+        .widget-error-banner {
+            display: none; background: #fef2f2; border: 1px solid #fecaca;
+            border-left: 4px solid #dc2626; color: #991b1b;
+            padding: 12px 14px; border-radius: 6px; font-weight: 600; font-size: 13px; line-height: 1.45;
+        }
+        .widget-error-banner.visible { display: block; }
+        .widget-error-banner.success {
+            background: #f0fdf4; border-color: #86efac; border-left-color: #16a34a; color: #14532d;
+        }
+        .student-block.has-error { border-color: #fc8181; box-shadow: 0 0 0 3px rgba(252,129,129,0.18); }
+        .field-error input, .field-error select {
+            border-color: #fc8181 !important; background: #fff5f5 !important;
+            box-shadow: 0 0 0 2px rgba(252,129,129,0.18);
+        }
+        .field-error-badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            background: #c53030; color: white; padding: 4px 10px;
+            border-radius: 14px; font-size: 11px; font-weight: 600; margin-top: 6px; line-height: 1.4;
+        }
+        .field-error-badge::before {
+            content: "!"; display: inline-flex; align-items: center; justify-content: center;
+            width: 14px; height: 14px; background: white; color: #c53030;
+            border-radius: 50%; font-size: 10px; font-weight: 800;
+        }
+    </style>
+</head>
+<body>
+
+<div id="widget-wrap">
+    <div id="widget-error-banner" class="widget-error-banner" role="alert"></div>
+
+    <!-- Student section -->
+    <div id="student-list"></div>
+    <div class="footer-row">
+        <button type="button" class="btn-add" id="btn-add-student" onclick="addNewStudent()">+ Add Student</button>
+        <div class="student-count-display" id="student-count-display"></div>
+    </div>
+
+    <!-- Musician section (optional) -->
+    <div class="section-divider">
+        <hr>
+        <span>Musician Details<span class="section-optional">(Optional · max 2)</span></span>
+        <hr>
+    </div>
+    <div id="musician-list"></div>
+    <div class="footer-row">
+        <button type="button" class="btn-add btn-add-musician" id="btn-add-musician" onclick="addNewMusician()">+ Add Musician</button>
+        <div class="musician-count-display" id="musician-count-display"></div>
+    </div>
+</div>
+
+<div style="display:none;">
+    <!-- Student template -->
+    <div class="student-block" id="MASTER_TEMPLATE">
+        <div class="student-count-badge">Student</div>
+        <div class="name-row">
+            <div><label>First Name<span>*</span></label><input type="text" class="fName" oninput="onFieldChange(this)"></div>
+            <div><label>Middle Name</label><input type="text" class="mName" oninput="onFieldChange(this)"></div>
+            <div><label>Surname<span>*</span></label><input type="text" class="sName" oninput="onFieldChange(this)"></div>
+        </div>
+        <div class="meta-row">
+            <div><label>Gender<span>*</span></label>
+                <select class="gender" onchange="onFieldChange(this)">
+                    <option value="">Select</option>
+                    <option value="Boy">Boy</option>
+                    <option value="Girl">Girl</option>
+                </select>
+            </div>
+            <div><label>Standard<span>*</span></label>
+                <select class="std" onchange="onFieldChange(this)">
+                    <option value="">Select</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                </select>
+            </div>
+            <div><label>Division</label><input type="text" class="div" oninput="onFieldChange(this)"></div>
+            <div class="del-col"></div>
+        </div>
+    </div>
+
+    <!-- Musician template -->
+    <div class="musician-block" id="MUSICIAN_TEMPLATE">
+        <div class="student-count-badge">Musician</div>
+        <div class="name-row">
+            <div><label>First Name</label><input type="text" class="mFName" oninput="sync()"></div>
+            <div><label>Middle Name</label><input type="text" class="mMName" oninput="sync()"></div>
+            <div><label>Surname</label><input type="text" class="mSName" oninput="sync()"></div>
+        </div>
+        <div class="meta-row musician-meta">
+            <div><label>Participant</label><input type="text" class="mPart" oninput="sync()" placeholder="e.g. Tabla, Harmonium"></div>
+            <div><label>Gender</label>
+                <select class="mGender" onchange="sync()">
+                    <option value="">Select</option>
+                    <option value="Boy">Boy</option>
+                    <option value="Girl">Girl</option>
+                </select>
+            </div>
+            <div><label>Standard</label>
+                <select class="mStd" onchange="sync()">
+                    <option value="">Select</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                </select>
+            </div>
+            <div><label>Division</label><input type="text" class="mDiv" oninput="sync()"></div>
+            <div class="del-col"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const MAX_STUDENTS  = 10;
+    const MAX_MUSICIANS = 2;
+    const TRASH_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+
+    let isReady = false;
+    let formIdForStorage = "";
+    let instanceId = "";
+    let uidCounter = 0;
+    let musicianCounter = 0;
+
+    function makeUid(preferred) {
+        if (preferred && !document.getElementById(preferred)) return preferred;
+        let c; do { uidCounter += 1; c = "u" + uidCounter; } while (document.getElementById(c)); return c;
+    }
+    function makeMUid(preferred) {
+        if (preferred && !document.getElementById(preferred)) return preferred;
+        let c; do { musicianCounter += 1; c = "m" + musicianCounter; } while (document.getElementById(c)); return c;
+    }
+    function findRow(uid) { return document.querySelector(`#student-list .student-block[id="${uid}"]`); }
+    function findMusician(uid) { return document.querySelector(`#musician-list .musician-block[id="${uid}"]`); }
+
+    // ---------- Persistence ----------
+    function storageKey() {
+        return "jfWidgetState::" + (formIdForStorage || "default") + "::" + (instanceId || "default");
+    }
+    function initInstanceId() {
+        const path = (typeof window !== 'undefined' && window.location && window.location.pathname) || '';
+        instanceId = path.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_') || 'default';
+        try {
+            const key = storageKey();
+            if (window.localStorage && localStorage.getItem(key) != null) localStorage.removeItem(key);
+        } catch (e) {}
+    }
+    function safeSet(s, k, v) { try { s.setItem(k, v); return true; } catch (e) { return false; } }
+    function safeGet(s, k) { try { return s.getItem(k) || ""; } catch (e) { return ""; } }
+    function persistAll(json) {
+        const key = storageKey();
+        try { window.name = JSON.stringify({ instanceId, k: key, v: json || "" }); } catch (e) {}
+        safeSet(sessionStorage, key, json || "");
+    }
+    function loadAny() {
+        const key = storageKey();
+        let fromWindowName = "";
+        try { if (window.name) { const p = JSON.parse(window.name); if (p && p.k === key) fromWindowName = p.v || ""; } } catch (e) {}
+        return { fromWindowName, fromSession: safeGet(sessionStorage, key) };
+    }
+    // ---------- end persistence ----------
+
+    const resizeObserver = new ResizeObserver(() => {
+        try { JFCustomWidget.requestFrameResize({ width: '100%', height: document.body.offsetHeight + 40 }); } catch (e) {}
+    });
+    resizeObserver.observe(document.body);
+
+    function studentCount()  { return document.querySelectorAll('#student-list .student-block').length; }
+    function musicianCount() { return document.querySelectorAll('#musician-list .musician-block').length; }
+
+    function mandatoryFilled(row) {
+        return !!(row.querySelector('.fName').value.trim()
+            && row.querySelector('.sName').value.trim()
+            && row.querySelector('.gender').value
+            && row.querySelector('.std').value);
+    }
+
+    function refreshIndices() {
+        const rows = document.querySelectorAll('#student-list .student-block');
+        rows.forEach((row, i) => {
+            row.querySelector('.student-count-badge').innerText = `Student ${i + 1}`;
+            row.querySelector('.del-col').innerHTML = (rows.length > 1)
+                ? `<button type="button" class="ref-delete-btn" onclick="removeRow('${row.id}')">${TRASH_ICON} Delete Student</button>`
+                : '';
+        });
+        const count = rows.length;
+        const atLimit = count >= MAX_STUDENTS;
+        const addBtn = document.getElementById('btn-add-student');
+        const countDisplay = document.getElementById('student-count-display');
+        if (addBtn) { addBtn.disabled = atLimit; addBtn.title = atLimit ? `Maximum ${MAX_STUDENTS} students reached` : ''; }
+        if (countDisplay) {
+            countDisplay.innerHTML = atLimit
+                ? `<span class="at-limit">${count} / ${MAX_STUDENTS} students (limit reached)</span>`
+                : `${count} / ${MAX_STUDENTS} students`;
+        }
+    }
+
+    function refreshMusicianIndices() {
+        const rows = document.querySelectorAll('#musician-list .musician-block');
+        rows.forEach((row, i) => {
+            row.querySelector('.student-count-badge').innerText = `Musician ${i + 1}`;
+            row.querySelector('.del-col').innerHTML =
+                `<button type="button" class="ref-delete-btn" onclick="removeMusician('${row.id}')">${TRASH_ICON} Delete Musician</button>`;
+        });
+        const count = rows.length;
+        const atLimit = count >= MAX_MUSICIANS;
+        const addBtn = document.getElementById('btn-add-musician');
+        const countDisplay = document.getElementById('musician-count-display');
+        if (addBtn) { addBtn.disabled = atLimit; addBtn.title = atLimit ? `Maximum ${MAX_MUSICIANS} musicians reached` : ''; }
+        if (countDisplay) { countDisplay.textContent = count > 0 ? `${count} / ${MAX_MUSICIANS} musicians` : ''; }
+    }
+
+    // ---------- Validation UI ----------
+    function clearFieldError(el) {
+        if (!el) return;
+        const w = el.parentElement;
+        if (w && w.classList.contains('field-error')) {
+            w.classList.remove('field-error');
+            const b = w.querySelector('.field-error-badge'); if (b) b.remove();
+        }
+    }
+    function clearAllErrors() {
+        const banner = document.getElementById('widget-error-banner');
+        if (banner) { banner.classList.remove('visible', 'success'); banner.textContent = ''; }
+        document.querySelectorAll('.student-block.has-error').forEach(r => r.classList.remove('has-error'));
+        document.querySelectorAll('.field-error').forEach(el => el.classList.remove('field-error'));
+        document.querySelectorAll('.field-error-badge').forEach(el => el.remove());
+    }
+    function showSuccessBanner() {
+        const banner = document.getElementById('widget-error-banner');
+        if (!banner) return;
+        banner.textContent = '✓ No more errors in student data.';
+        banner.classList.add('visible', 'success');
+    }
+    function refreshBannerState() {
+        const banner = document.getElementById('widget-error-banner');
+        if (!banner || !banner.classList.contains('visible')) return;
+        const state = collectState();
+        if (state.allValid) { if (!banner.classList.contains('success')) showSuccessBanner(); }
+        else if (banner.classList.contains('success')) clearAllErrors();
+    }
+    function markFieldEmpty(el) {
+        if (!el || (el.value && el.value.trim())) return;
+        const w = el.parentElement;
+        if (w && !w.classList.contains('field-error')) {
+            w.classList.add('field-error');
+            const b = document.createElement('div');
+            b.className = 'field-error-badge'; b.textContent = 'This field is required';
+            w.appendChild(b);
+        }
+    }
+    function showInlineErrors(state) {
+        clearAllErrors();
+        const banner = document.getElementById('widget-error-banner');
+        const rows = document.querySelectorAll('#student-list .student-block');
+        const messages = [];
+
+        if (state.count === 0) messages.push('Please add at least one student before continuing.');
+
+        if (state.missing.length === 1) {
+            messages.push(`Student ${state.missing[0]} is incomplete. Please fill First Name, Surname, Gender and Standard before continuing.`);
+        } else if (state.missing.length > 1) {
+            messages.push(`Students ${state.missing.join(', ')} are incomplete. Please fill First Name, Surname, Gender and Standard for each before continuing.`);
+        }
+        state.missing.forEach((idx) => {
+            const row = rows[idx - 1]; if (!row) return;
+            row.classList.add('has-error');
+            markFieldEmpty(row.querySelector('.fName'));
+            markFieldEmpty(row.querySelector('.sName'));
+            markFieldEmpty(row.querySelector('.gender'));
+            markFieldEmpty(row.querySelector('.std'));
+        });
+        if (state.duplicates && state.duplicates.length > 0) {
+            messages.push(`Students ${state.duplicates.join(' and ')} appear to be duplicates (same First Name, Surname, Gender and Standard). Please remove the duplicate entry.`);
+            state.duplicates.forEach((idx) => {
+                const row = rows[idx - 1]; if (!row) return;
+                row.classList.add('has-error');
+            });
+        }
+        if (banner && messages.length > 0) { banner.innerHTML = messages.join('<br>'); banner.classList.add('visible'); }
+        const allBad = [...state.missing, ...(state.duplicates || [])].sort((a, b) => a - b);
+        if (allBad[0]) {
+            const firstBad = rows[allBad[0] - 1];
+            if (firstBad) try { firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+        }
+    }
+    // ---------- end validation UI ----------
+
+    function onFieldChange(el) {
+        const row = el.closest('.student-block');
+        if (row) { clearFieldError(el); if (mandatoryFilled(row)) row.classList.remove('has-error'); }
+        sync();
+        refreshBannerState();
+    }
+
+    function addNewStudent(savedData = null) {
+        if (studentCount() >= MAX_STUDENTS) {
+            if (!savedData) alert(`You can add at most ${MAX_STUDENTS} students.`);
+            return;
+        }
+        const list = document.getElementById('student-list');
+        const uid  = makeUid(savedData?.uid);
+        const block = document.getElementById('MASTER_TEMPLATE').cloneNode(true);
+        block.id = uid;
+        block.querySelectorAll('input, select').forEach((el) => {
+            if (el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = "";
+        });
+        block.querySelector('.del-col').innerHTML = "";
+        if (savedData) {
+            block.querySelector('.fName').value = savedData.firstName || "";
+            block.querySelector('.mName').value = savedData.middleName || "";
+            block.querySelector('.sName').value = savedData.surname || "";
+            block.querySelector('.gender').value = savedData.gender || "";
+            block.querySelector('.std').value    = savedData.standard || "";
+            block.querySelector('.div').value    = savedData.division || "";
+        }
+        list.appendChild(block);
+        refreshIndices();
+        if (!savedData) sync();
+    }
+
+    function removeRow(uid) {
+        const row = findRow(uid); if (row) row.remove();
+        refreshIndices(); sync(); refreshBannerState();
+    }
+
+    function addNewMusician(savedData = null) {
+        if (musicianCount() >= MAX_MUSICIANS) {
+            if (!savedData) alert(`You can add at most ${MAX_MUSICIANS} musicians.`);
+            return;
+        }
+        const list = document.getElementById('musician-list');
+        const uid  = makeMUid(savedData?.uid);
+        const block = document.getElementById('MUSICIAN_TEMPLATE').cloneNode(true);
+        block.id = uid;
+        block.querySelectorAll('input, select').forEach((el) => {
+            if (el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = "";
+        });
+        block.querySelector('.del-col').innerHTML = "";
+        if (savedData) {
+            block.querySelector('.mFName').value = savedData.firstName || "";
+            block.querySelector('.mMName').value = savedData.middleName || "";
+            block.querySelector('.mSName').value = savedData.surname || "";
+            block.querySelector('.mPart').value  = savedData.participant || "";
+            block.querySelector('.mGender').value = savedData.gender || "";
+            block.querySelector('.mStd').value   = savedData.standard || "";
+            block.querySelector('.mDiv').value   = savedData.division || "";
+        }
+        list.appendChild(block);
+        refreshMusicianIndices();
+        if (!savedData) sync();
+    }
+
+    function removeMusician(uid) {
+        const row = findMusician(uid); if (row) row.remove();
+        refreshMusicianIndices(); sync(); refreshBannerState();
+    }
+
+    // ---------- State / Sync ----------
+    function formatPretty(students, musicians) {
+        const lines = [];
+        if (!students.length) {
+            lines.push("(no students submitted)");
+        } else {
+            lines.push(`Student Submissions — ${students.length} student${students.length === 1 ? '' : 's'}`);
+            lines.push("");
+            students.forEach((s, i) => {
+                const hasFirst = !!String(s.firstName || '').trim();
+                const hasSur   = !!String(s.surname   || '').trim();
+                const fullName = (hasFirst && hasSur)
+                    ? [s.firstName, s.middleName, s.surname].filter(Boolean).join(' ').trim()
+                    : "(not provided)";
+                const classDisplay = s.standard
+                    ? (s.division ? `${s.standard} (Division ${s.division})` : `${s.standard}`)
+                    : "(not provided)";
+                if (i > 0) lines.push("");
+                lines.push(`Student ${i + 1}`);
+                lines.push(`Name: ${fullName}`);
+                lines.push(`Gender: ${s.gender || '(not provided)'}`);
+                lines.push(`Class: ${classDisplay}`);
+            });
+        }
+        if (musicians.length > 0) {
+            lines.push("");
+            lines.push(`Musician Submissions — ${musicians.length} musician${musicians.length === 1 ? '' : 's'}`);
+            musicians.forEach((m, i) => {
+                const fn = String(m.firstName || '').trim();
+                const mn = String(m.middleName || '').trim();
+                const sn = String(m.surname || '').trim();
+                const fullName = [fn, mn, sn].filter(Boolean).join(' ') || '(not provided)';
+                const classDisplay = m.standard
+                    ? (m.division ? `${m.standard} (Division ${m.division})` : `${m.standard}`)
+                    : '';
+                lines.push("");
+                lines.push(`Musician ${i + 1}`);
+                lines.push(`Name: ${fullName}`);
+                if (m.participant) lines.push(`Participant: ${m.participant}`);
+                if (m.gender) lines.push(`Gender: ${m.gender}`);
+                if (classDisplay) lines.push(`Class: ${classDisplay}`);
+            });
+        }
+        return lines.join("\n");
+    }
+
+    function collectState() {
+        const students = [];
+        const missing  = [];
+        const duplicateIdxSet = new Set();
+        const fingerprintMap  = {};
+        let allValid = true;
+
+        document.querySelectorAll('#student-list .student-block').forEach((row, idx) => {
+            const rowId  = row.id;
+            const fName  = row.querySelector('.fName').value.trim();
+            const sName  = row.querySelector('.sName').value.trim();
+            const gender = row.querySelector('.gender').value;
+            const std    = row.querySelector('.std').value;
+            if (!fName || !sName || !gender || !std) {
+                allValid = false; missing.push(idx + 1);
+            } else {
+                const fp = `${fName.toLowerCase()}|${sName.toLowerCase()}|${gender}|${std}`;
+                if (fingerprintMap[fp] !== undefined) {
+                    duplicateIdxSet.add(fingerprintMap[fp]); duplicateIdxSet.add(idx + 1); allValid = false;
+                } else { fingerprintMap[fp] = idx + 1; }
+            }
+            students.push({
+                uid: rowId, firstName: fName, middleName: row.querySelector('.mName').value,
+                surname: sName, gender, standard: std, division: row.querySelector('.div').value
+            });
+        });
+
+        const musicians = [];
+        document.querySelectorAll('#musician-list .musician-block').forEach((row) => {
+            musicians.push({
+                uid: row.id,
+                firstName:  row.querySelector('.mFName').value.trim(),
+                middleName: row.querySelector('.mMName').value.trim(),
+                surname:    row.querySelector('.mSName').value.trim(),
+                participant: row.querySelector('.mPart').value.trim(),
+                gender:     row.querySelector('.mGender').value,
+                standard:   row.querySelector('.mStd').value,
+                division:   row.querySelector('.mDiv').value.trim()
+            });
+        });
+
+        const duplicates  = [...duplicateIdxSet].sort((a, b) => a - b);
+        const payload     = JSON.stringify({ students, musicians });
+        const prettyValue = formatPretty(students, musicians);
+        return {
+            payload, prettyValue,
+            allValid: allValid && students.length > 0,
+            missing, duplicates, count: students.length
+        };
+    }
+
+    function sync() {
+        if (!isReady) return;
+        const { payload, prettyValue, allValid } = collectState();
+        persistAll(payload);
+        JFCustomWidget.sendData({ valid: allValid, value: prettyValue });
+    }
+
+    function hasRealData(e) {
+        if (!e) return false;
+        const t = (v) => typeof v === 'string' ? v.trim() : '';
+        return !!(t(e.firstName) || t(e.middleName) || t(e.surname) || e.gender || e.standard || t(e.division));
+    }
+    function hasMusicianData(e) {
+        if (!e) return false;
+        const t = (v) => typeof v === 'string' ? v.trim() : '';
+        return !!(t(e.firstName) || t(e.middleName) || t(e.surname) || t(e.participant) || e.gender || e.standard || t(e.division));
+    }
+
+    function parsePrettyText(raw) {
+        if (typeof raw !== 'string') return null;
+        const valOrEmpty = (v) => (!v || v === '(not provided)') ? '' : v;
+
+        function parseNameClass(fields, entry) {
+            if (fields['name']) {
+                const parts = fields['name'].split(/\s+/).filter(Boolean);
+                entry.firstName = parts[0] || '';
+                if (parts.length === 2) { entry.surname = parts[1]; }
+                else if (parts.length >= 3) { entry.middleName = parts.slice(1, -1).join(' '); entry.surname = parts[parts.length - 1]; }
+            }
+            entry.gender = fields['gender'] || '';
+            if (fields['class']) {
+                const cm = fields['class'].match(/^(\S+)(?:\s*\(Division\s+(.+?)\))?$/);
+                if (cm) { entry.standard = cm[1]; if (cm[2]) entry.division = cm[2]; }
+            }
+        }
+
+        const result = { students: [], musicians: [] };
+
+        if (raw.includes('Student ')) {
+            const studentPart = raw.split(/\nMusician Submissions/)[0];
+            studentPart.split(/(?:^|\n)Student \d+\s*\n/).slice(1).forEach((block) => {
+                const fields = {};
+                block.split('\n').forEach((line) => {
+                    const m = line.match(/^([A-Za-z][A-Za-z ]*?):\s*(.+?)\s*$/);
+                    if (m) fields[m[1].toLowerCase().trim()] = valOrEmpty(m[2]);
+                });
+                const entry = {};
+                parseNameClass(fields, entry);
+                if (hasRealData(entry)) result.students.push(entry);
+            });
+        }
+
+        if (raw.includes('Musician Submissions')) {
+            const mm = raw.match(/Musician Submissions[^\n]*\n([\s\S]*)/);
+            if (mm) {
+                mm[1].split(/(?:^|\n)Musician \d+\s*\n/).slice(1).forEach((block) => {
+                    const fields = {};
+                    block.split('\n').forEach((line) => {
+                        const m = line.match(/^([A-Za-z][A-Za-z ]*?):\s*(.+?)\s*$/);
+                        if (m) fields[m[1].toLowerCase().trim()] = valOrEmpty(m[2]);
+                    });
+                    const entry = { firstName: '', middleName: '', surname: '', participant: '', gender: '', standard: '', division: '' };
+                    parseNameClass(fields, entry);
+                    entry.participant = fields['participant'] || '';
+                    if (hasMusicianData(entry)) result.musicians.push(entry);
+                });
+            }
+        }
+
+        return (result.students.length || result.musicians.length) ? result : null;
+    }
+
+    function restoreFromValue(raw) {
+        if (!raw) return false;
+        let students = null, musicians = null;
+
+        try {
+            const d = JSON.parse(raw);
+            if (d && typeof d === 'object' && !Array.isArray(d) && d.students) {
+                students = Array.isArray(d.students) ? d.students : [];
+                musicians = Array.isArray(d.musicians) ? d.musicians : [];
+            } else if (Array.isArray(d)) {
+                students = d; musicians = [];
+            }
+        } catch (e) {}
+
+        if (!students) {
+            const parsed = parsePrettyText(raw);
+            if (parsed) { students = parsed.students; musicians = parsed.musicians; }
+        }
+
+        if (!students || !students.length) return false;
+        const meaningful = students.filter(hasRealData);
+        if (!meaningful.length) return false;
+
+        document.getElementById('student-list').innerHTML  = '';
+        document.getElementById('musician-list').innerHTML = '';
+        meaningful.slice(0, MAX_STUDENTS).forEach((e) => addNewStudent(e));
+        if (musicians) musicians.filter(hasMusicianData).slice(0, MAX_MUSICIANS).forEach((e) => addNewMusician(e));
+        return true;
+    }
+
+    JFCustomWidget.subscribe("ready", function () {
+        isReady = true;
+        initInstanceId();
+        const a0 = arguments[0], a1 = arguments[1];
+        let fromJotform = "", formIdGuess = "";
+        if (typeof a0 === 'string') { formIdGuess = a0; fromJotform = typeof a1 === 'string' ? a1 : ""; }
+        else if (a0 && typeof a0 === 'object') {
+            formIdGuess = a0.formId || "";
+            fromJotform = a0.value || (a0.fieldData && a0.fieldData.value) || (a0.data && a0.data.value) || "";
+        }
+        formIdForStorage = formIdGuess ? String(formIdGuess) : "default";
+        const layers = loadAny();
+        const saved  = fromJotform || layers.fromWindowName || layers.fromSession || "";
+        if (!restoreFromValue(saved)) addNewStudent();
+        refreshIndices(); refreshMusicianIndices(); sync();
+    });
+
+    JFCustomWidget.subscribe("populate", (data) => {
+        const saved = (data && (data.value || (data.fieldData && data.fieldData.value))) || '';
+        if (saved && restoreFromValue(saved)) { refreshIndices(); refreshMusicianIndices(); sync(); }
+    });
+
+    JFCustomWidget.subscribe("submit", () => {
+        const state = collectState();
+        persistAll(state.payload);
+        if (!state.allValid) showInlineErrors(state); else clearAllErrors();
+        JFCustomWidget.sendSubmit({ valid: state.allValid, value: state.prettyValue });
+    });
+</script>
+</body>
+</html>

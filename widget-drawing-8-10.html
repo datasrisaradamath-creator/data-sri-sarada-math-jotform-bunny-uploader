@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="//js.jotform.com/JotFormCustomWidget.min.js"></script>
+    <style>
+        html, body { margin: 0; padding: 0; background: transparent; overflow-x: hidden; }
+        body { font-family: -apple-system, sans-serif; padding: 20px 2px 12px 2px; }
+
+        #widget-wrap { display: flex; flex-direction: column; gap: 20px; width: 100%; box-sizing: border-box; }
+
+        #student-list { display: flex; flex-direction: column; gap: 30px; width: 100%; }
+
+        .student-block {
+            position: relative;
+            padding: 25px 8px 20px 8px;
+            border: 1px solid #e1e4e8;
+            border-radius: 12px;
+            background: #ffffff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            display: flex; flex-direction: column; gap: 18px;
+            box-sizing: border-box;
+        }
+        .student-count-badge {
+            position: absolute; top: -14px; left: 15px;
+            background: #4a5568; color: white;
+            padding: 4px 14px; border-radius: 20px;
+            font-size: 11px; font-weight: bold; z-index: 10;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .name-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+        .meta-row { display: grid; grid-template-columns: 1fr 1fr 100px auto; gap: 12px; align-items: end; }
+
+        @media screen and (max-width: 650px) {
+            .name-row, .meta-row { grid-template-columns: 1fr; }
+            .ref-delete-btn { width: 100%; justify-content: center; }
+        }
+
+        label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px; color: #333; text-transform: uppercase; }
+        label span { color: #d73a49; }
+
+        input, select {
+            width: 100%; padding: 10px; border: 1px solid #ccd0d5; border-radius: 6px;
+            font-size: 14px; background: #fafbfc; height: 40px; box-sizing: border-box;
+        }
+
+        .ref-delete-btn {
+            background: #f7fafc; color: #e53e3e; border: 1px solid #feb2b2;
+            border-radius: 6px; cursor: pointer; display: flex; align-items: center;
+            gap: 6px; height: 40px; padding: 0 12px; font-size: 13px; font-weight: 600;
+        }
+
+        .footer-row {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 12px; flex-wrap: wrap;
+        }
+        .btn-add {
+            background: #4a5568; color: white; border: none;
+            padding: 14px 28px; border-radius: 8px; cursor: pointer;
+            font-weight: bold; font-size: 14px; width: fit-content; margin-bottom: 10px;
+        }
+        .btn-add:hover:not(:disabled) { background: #2d3748; }
+        .btn-add:disabled { background: #a0aec0; cursor: not-allowed; opacity: 0.7; }
+        .student-count-display { font-size: 13px; color: #4a5568; font-weight: 600; }
+        .student-count-display .at-limit { color: #b54708; }
+
+        .widget-error-banner {
+            display: none; background: #fef2f2; border: 1px solid #fecaca;
+            border-left: 4px solid #dc2626; color: #991b1b;
+            padding: 12px 14px; border-radius: 6px; font-weight: 600;
+            font-size: 13px; line-height: 1.45;
+        }
+        .widget-error-banner.visible { display: block; }
+        .widget-error-banner.success {
+            background: #f0fdf4; border-color: #86efac;
+            border-left-color: #16a34a; color: #14532d;
+        }
+        .student-block.has-error { border-color: #fc8181; box-shadow: 0 0 0 3px rgba(252,129,129,0.18); }
+        .field-error input, .field-error select {
+            border-color: #fc8181 !important; background: #fff5f5 !important;
+            box-shadow: 0 0 0 2px rgba(252,129,129,0.18);
+        }
+        .field-error-badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            background: #c53030; color: white; padding: 4px 10px;
+            border-radius: 14px; font-size: 11px; font-weight: 600;
+            margin-top: 6px; line-height: 1.4;
+        }
+        .field-error-badge::before {
+            content: "!"; display: inline-flex; align-items: center;
+            justify-content: center; width: 14px; height: 14px;
+            background: white; color: #c53030; border-radius: 50%;
+            font-size: 10px; font-weight: 800;
+        }
+    </style>
+</head>
+<body>
+
+<div id="widget-wrap">
+    <div id="widget-error-banner" class="widget-error-banner" role="alert"></div>
+    <div id="student-list"></div>
+    <div class="footer-row">
+        <button type="button" class="btn-add" id="btn-add-student" onclick="addNewStudent()">+ Add Student</button>
+        <div class="student-count-display" id="student-count-display"></div>
+    </div>
+</div>
+
+<div style="display:none;">
+    <div class="student-block" id="MASTER_TEMPLATE">
+        <div class="student-count-badge">Student</div>
+        <div class="name-row">
+            <div><label>First Name<span>*</span></label><input type="text" class="fName" oninput="onFieldChange(this)"></div>
+            <div><label>Middle Name</label><input type="text" class="mName" oninput="onFieldChange(this)"></div>
+            <div><label>Surname<span>*</span></label><input type="text" class="sName" oninput="onFieldChange(this)"></div>
+        </div>
+        <div class="meta-row">
+            <div><label>Gender<span>*</span></label>
+                <select class="gender" disabled style="color:#555;background:#f0f0f0;">
+                    <option value="Girl">Girl</option>
+                </select>
+            </div>
+            <div><label>Standard<span>*</span></label>
+                <select class="std" onchange="onFieldChange(this)">
+                    <option value="">Select</option>
+                    <option value="8">8</option>
+                    <option value="9">9</option>
+                    <option value="10">10</option>
+                </select>
+            </div>
+            <div><label>Division</label><input type="text" class="div" oninput="onFieldChange(this)"></div>
+            <div class="del-col"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const MAX_STUDENTS = 25;
+    const TRASH_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+
+    let isReady = false;
+    let formIdForStorage = "";
+    let instanceId = "";
+    let uidCounter = 0;
+
+    function makeUid(preferred) {
+        if (preferred && !document.getElementById(preferred)) return preferred;
+        let candidate;
+        do { uidCounter += 1; candidate = "u" + uidCounter; } while (document.getElementById(candidate));
+        return candidate;
+    }
+    function findRow(uid) {
+        return document.querySelector(`#student-list .student-block[id="${uid}"]`);
+    }
+
+    // ---------- Persistence ----------
+    function storageKey() {
+        return "jfWidgetState::" + (formIdForStorage || "default") + "::" + (instanceId || "default");
+    }
+    function initInstanceId() {
+        const path = (typeof window !== 'undefined' && window.location && window.location.pathname) || '';
+        instanceId = path.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_') || 'default';
+        try {
+            const key = storageKey();
+            if (window.localStorage && localStorage.getItem(key) != null) localStorage.removeItem(key);
+        } catch (e) {}
+    }
+    function safeSet(s, k, v) { try { s.setItem(k, v); return true; } catch (e) { return false; } }
+    function safeGet(s, k) { try { return s.getItem(k) || ""; } catch (e) { return ""; } }
+    function persistAll(json) {
+        const key = storageKey();
+        try { window.name = JSON.stringify({ instanceId, k: key, v: json || "" }); } catch (e) {}
+        safeSet(sessionStorage, key, json || "");
+    }
+    function loadAny() {
+        const key = storageKey();
+        let fromWindowName = "";
+        try { if (window.name) { const p = JSON.parse(window.name); if (p && p.k === key) fromWindowName = p.v || ""; } } catch (e) {}
+        return { fromWindowName, fromSession: safeGet(sessionStorage, key) };
+    }
+    // ---------- end persistence ----------
+
+    const resizeObserver = new ResizeObserver(() => {
+        try { JFCustomWidget.requestFrameResize({ width: '100%', height: document.body.offsetHeight + 40 }); } catch (e) {}
+    });
+    resizeObserver.observe(document.body);
+
+    function studentCount() { return document.querySelectorAll('#student-list .student-block').length; }
+
+    function mandatoryFilled(row) {
+        return !!(row.querySelector('.fName').value.trim()
+            && row.querySelector('.sName').value.trim()
+            && row.querySelector('.gender').value
+            && row.querySelector('.std').value);
+    }
+
+    function refreshIndices() {
+        const rows = document.querySelectorAll('#student-list .student-block');
+        rows.forEach((row, i) => {
+            row.querySelector('.student-count-badge').innerText = `Student ${i + 1}`;
+            row.querySelector('.del-col').innerHTML = (rows.length > 1)
+                ? `<button type="button" class="ref-delete-btn" onclick="removeRow('${row.id}')">${TRASH_ICON} Delete Student</button>`
+                : '';
+        });
+        const count = rows.length;
+        const atLimit = count >= MAX_STUDENTS;
+        const addBtn = document.getElementById('btn-add-student');
+        const countDisplay = document.getElementById('student-count-display');
+        if (addBtn) { addBtn.disabled = atLimit; addBtn.title = atLimit ? `Maximum ${MAX_STUDENTS} students reached` : ''; }
+        if (countDisplay) {
+            countDisplay.innerHTML = atLimit
+                ? `<span class="at-limit">${count} / ${MAX_STUDENTS} students (limit reached)</span>`
+                : `${count} / ${MAX_STUDENTS} students`;
+        }
+    }
+
+    // ---------- Validation UI ----------
+    function clearFieldError(el) {
+        if (!el) return;
+        const w = el.parentElement;
+        if (w && w.classList.contains('field-error')) {
+            w.classList.remove('field-error');
+            const b = w.querySelector('.field-error-badge'); if (b) b.remove();
+        }
+    }
+    function clearAllErrors() {
+        const banner = document.getElementById('widget-error-banner');
+        if (banner) { banner.classList.remove('visible', 'success'); banner.textContent = ''; }
+        document.querySelectorAll('.student-block.has-error').forEach(r => r.classList.remove('has-error'));
+        document.querySelectorAll('.field-error').forEach(el => el.classList.remove('field-error'));
+        document.querySelectorAll('.field-error-badge').forEach(el => el.remove());
+    }
+    function showSuccessBanner() {
+        const banner = document.getElementById('widget-error-banner');
+        if (!banner) return;
+        banner.textContent = '✓ No more errors in student data.';
+        banner.classList.add('visible', 'success');
+    }
+    function refreshBannerState() {
+        const banner = document.getElementById('widget-error-banner');
+        if (!banner || !banner.classList.contains('visible')) return;
+        const state = collectState();
+        if (state.allValid) { if (!banner.classList.contains('success')) showSuccessBanner(); }
+        else if (banner.classList.contains('success')) clearAllErrors();
+    }
+    function markFieldEmpty(el) {
+        if (!el || (el.value && el.value.trim())) return;
+        const w = el.parentElement;
+        if (w && !w.classList.contains('field-error')) {
+            w.classList.add('field-error');
+            const b = document.createElement('div');
+            b.className = 'field-error-badge'; b.textContent = 'This field is required';
+            w.appendChild(b);
+        }
+    }
+    function showInlineErrors(state) {
+        clearAllErrors();
+        const banner = document.getElementById('widget-error-banner');
+        const rows = document.querySelectorAll('#student-list .student-block');
+        const messages = [];
+
+        if (state.count === 0) messages.push('Please add at least one student before continuing.');
+
+        if (state.missing.length === 1) {
+            messages.push(`Student ${state.missing[0]} is incomplete. Please fill First Name, Surname, Gender and Standard before continuing.`);
+        } else if (state.missing.length > 1) {
+            messages.push(`Students ${state.missing.join(', ')} are incomplete. Please fill First Name, Surname, Gender and Standard for each before continuing.`);
+        }
+        state.missing.forEach((idx) => {
+            const row = rows[idx - 1]; if (!row) return;
+            row.classList.add('has-error');
+            markFieldEmpty(row.querySelector('.fName'));
+            markFieldEmpty(row.querySelector('.sName'));
+            markFieldEmpty(row.querySelector('.gender'));
+            markFieldEmpty(row.querySelector('.std'));
+        });
+
+        if (state.duplicates && state.duplicates.length > 0) {
+            messages.push(`Students ${state.duplicates.join(' and ')} appear to be duplicates (same First Name, Surname, Gender and Standard). Please remove the duplicate entry.`);
+            state.duplicates.forEach((idx) => {
+                const row = rows[idx - 1]; if (!row) return;
+                row.classList.add('has-error');
+            });
+        }
+
+        if (banner && messages.length > 0) { banner.innerHTML = messages.join('<br>'); banner.classList.add('visible'); }
+
+        const allBad = [...state.missing, ...(state.duplicates || [])].sort((a, b) => a - b);
+        if (allBad[0]) {
+            const firstBad = rows[allBad[0] - 1];
+            if (firstBad) try { firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+        }
+    }
+    // ---------- end validation UI ----------
+
+    function onFieldChange(el) {
+        const row = el.closest('.student-block');
+        if (row) { clearFieldError(el); if (mandatoryFilled(row)) row.classList.remove('has-error'); }
+        sync();
+        refreshBannerState();
+    }
+
+    function addNewStudent(savedData = null) {
+        if (studentCount() >= MAX_STUDENTS) {
+            if (!savedData) alert(`You can add at most ${MAX_STUDENTS} students.`);
+            return;
+        }
+        const list = document.getElementById('student-list');
+        const uid  = makeUid(savedData?.uid);
+        const block = document.getElementById('MASTER_TEMPLATE').cloneNode(true);
+        block.id = uid;
+        block.querySelectorAll('input, select').forEach((el) => {
+            if (el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = "";
+        });
+        block.querySelector('.del-col').innerHTML = "";
+
+        if (savedData) {
+            block.querySelector('.fName').value = savedData.firstName || "";
+            block.querySelector('.mName').value = savedData.middleName || "";
+            block.querySelector('.sName').value = savedData.surname || "";
+            block.querySelector('.gender').value = savedData.gender || "";
+            block.querySelector('.std').value    = savedData.standard || "";
+            block.querySelector('.div').value    = savedData.division || "";
+        }
+        list.appendChild(block);
+        refreshIndices();
+        if (!savedData) sync();
+    }
+
+    function removeRow(uid) {
+        const row = findRow(uid); if (row) row.remove();
+        refreshIndices(); sync(); refreshBannerState();
+    }
+
+    // ---------- State / Sync ----------
+    function formatPretty(entries) {
+        if (!entries.length) return "(no students submitted)";
+        const lines = [];
+        lines.push(`Student Submissions — ${entries.length} student${entries.length === 1 ? '' : 's'}`);
+        lines.push("");
+        entries.forEach((s, i) => {
+            const hasFirst = !!String(s.firstName || '').trim();
+            const hasSur   = !!String(s.surname   || '').trim();
+            const fullName = (hasFirst && hasSur)
+                ? [s.firstName, s.middleName, s.surname].filter(Boolean).join(' ').trim()
+                : "(not provided)";
+            const classDisplay = s.standard
+                ? (s.division ? `${s.standard} (Division ${s.division})` : `${s.standard}`)
+                : "(not provided)";
+            if (i > 0) lines.push("");
+            lines.push(`Student ${i + 1}`);
+            lines.push(`Name: ${fullName}`);
+            lines.push(`Gender: ${s.gender || '(not provided)'}`);
+            lines.push(`Class: ${classDisplay}`);
+        });
+        return lines.join("\n");
+    }
+
+    function collectState() {
+        const out = [];
+        const missing = [];
+        const duplicateIdxSet = new Set();
+        const fingerprintMap  = {};
+        let allValid = true;
+
+        document.querySelectorAll('#student-list .student-block').forEach((row, idx) => {
+            const rowId  = row.id;
+            const fName  = row.querySelector('.fName').value.trim();
+            const sName  = row.querySelector('.sName').value.trim();
+            const gender = row.querySelector('.gender').value;
+            const std    = row.querySelector('.std').value;
+
+            if (!fName || !sName || !gender || !std) {
+                allValid = false; missing.push(idx + 1);
+            } else {
+                const fp = `${fName.toLowerCase()}|${sName.toLowerCase()}|${gender}|${std}`;
+                if (fingerprintMap[fp] !== undefined) {
+                    duplicateIdxSet.add(fingerprintMap[fp]); duplicateIdxSet.add(idx + 1); allValid = false;
+                } else { fingerprintMap[fp] = idx + 1; }
+            }
+            out.push({
+                uid: rowId, firstName: fName, middleName: row.querySelector('.mName').value,
+                surname: sName, gender, standard: std, division: row.querySelector('.div').value
+            });
+        });
+
+        const duplicates  = [...duplicateIdxSet].sort((a, b) => a - b);
+        const payload     = JSON.stringify(out);
+        const prettyValue = formatPretty(out);
+        return { payload, prettyValue, allValid: allValid && out.length > 0, missing, duplicates, count: out.length };
+    }
+
+    function sync() {
+        if (!isReady) return;
+        const { payload, prettyValue, allValid } = collectState();
+        persistAll(payload);
+        JFCustomWidget.sendData({ valid: allValid, value: prettyValue });
+    }
+
+    function hasRealData(e) {
+        if (!e) return false;
+        const t = (v) => typeof v === 'string' ? v.trim() : '';
+        return !!(t(e.firstName) || t(e.middleName) || t(e.surname) || e.gender || e.standard || t(e.division));
+    }
+
+    function parsePrettyText(raw) {
+        if (typeof raw !== 'string' || !raw.includes('Student ')) return null;
+        const valOrEmpty = (v) => (!v || v === '(not provided)') ? '' : v;
+        const blocks = raw.split(/(?:^|\n)Student \d+\s*\n/).slice(1);
+        const entries = [];
+        blocks.forEach((block) => {
+            const fields = {};
+            block.split('\n').forEach((line) => {
+                const m = line.match(/^([A-Za-z][A-Za-z ]*?):\s*(.+?)\s*$/);
+                if (m) fields[m[1].toLowerCase().trim()] = valOrEmpty(m[2]);
+            });
+            const entry = {};
+            if (fields['name']) {
+                const parts = fields['name'].split(/\s+/).filter(Boolean);
+                entry.firstName = parts[0] || '';
+                if (parts.length === 2) { entry.surname = parts[1]; }
+                else if (parts.length >= 3) { entry.middleName = parts.slice(1, -1).join(' '); entry.surname = parts[parts.length - 1]; }
+            }
+            entry.gender = fields['gender'] || '';
+            if (fields['class']) {
+                const cm = fields['class'].match(/^(\S+)(?:\s*\(Division\s+(.+?)\))?$/);
+                if (cm) { entry.standard = cm[1]; if (cm[2]) entry.division = cm[2]; }
+            }
+            if (hasRealData(entry)) entries.push(entry);
+        });
+        return entries.length ? entries : null;
+    }
+
+    function restoreFromValue(raw) {
+        if (!raw) return false;
+        let parsed = null;
+        try { const d = JSON.parse(raw); if (Array.isArray(d)) parsed = d; } catch (e) {}
+        if (!parsed) parsed = parsePrettyText(raw);
+        if (!parsed || !parsed.length) return false;
+        const meaningful = parsed.filter(hasRealData);
+        if (!meaningful.length) return false;
+        document.getElementById('student-list').innerHTML = '';
+        meaningful.slice(0, MAX_STUDENTS).forEach((e) => addNewStudent(e));
+        return true;
+    }
+
+    JFCustomWidget.subscribe("ready", function () {
+        isReady = true;
+        initInstanceId();
+        const a0 = arguments[0], a1 = arguments[1];
+        let fromJotform = "", formIdGuess = "";
+        if (typeof a0 === 'string') { formIdGuess = a0; fromJotform = typeof a1 === 'string' ? a1 : ""; }
+        else if (a0 && typeof a0 === 'object') {
+            formIdGuess = a0.formId || "";
+            fromJotform = a0.value || (a0.fieldData && a0.fieldData.value) || (a0.data && a0.data.value) || "";
+        }
+        formIdForStorage = formIdGuess ? String(formIdGuess) : "default";
+        const layers = loadAny();
+        const saved  = fromJotform || layers.fromWindowName || layers.fromSession || "";
+        if (!restoreFromValue(saved)) addNewStudent();
+        refreshIndices(); sync();
+    });
+
+    JFCustomWidget.subscribe("populate", (data) => {
+        const saved = (data && (data.value || (data.fieldData && data.fieldData.value))) || '';
+        if (saved && restoreFromValue(saved)) { refreshIndices(); sync(); }
+    });
+
+    JFCustomWidget.subscribe("submit", () => {
+        const state = collectState();
+        persistAll(state.payload);
+        if (!state.allValid) showInlineErrors(state); else clearAllErrors();
+        JFCustomWidget.sendSubmit({ valid: state.allValid, value: state.prettyValue });
+    });
+</script>
+</body>
+</html>

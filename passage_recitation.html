@@ -635,20 +635,19 @@
         clearAllErrors();
 
         const banner = document.getElementById('widget-error-banner');
-        if (banner) {
-            if (state.count === 0) {
-                banner.textContent = 'Please add at least one student before continuing.';
-            } else if (state.missing.length === 1) {
-                banner.textContent =
-                    `Student ${state.missing[0]} is incomplete. Please fill First Name, Surname, Gender and Standard before continuing.`;
-            } else {
-                banner.textContent =
-                    `Students ${state.missing.join(', ')} are incomplete. Please fill First Name, Surname, Gender and Standard for each before continuing.`;
-            }
-            banner.classList.add('visible');
+        const rows   = document.querySelectorAll('#student-list .student-block');
+        const messages = [];
+
+        if (state.count === 0) {
+            messages.push('Please add at least one student before continuing.');
         }
 
-        const rows = document.querySelectorAll('#student-list .student-block');
+        if (state.missing.length === 1) {
+            messages.push(`Student ${state.missing[0]} is incomplete. Please fill First Name, Surname, Gender and Standard before continuing.`);
+        } else if (state.missing.length > 1) {
+            messages.push(`Students ${state.missing.join(', ')} are incomplete. Please fill First Name, Surname, Gender and Standard for each before continuing.`);
+        }
+
         state.missing.forEach((idx) => {
             const row = rows[idx - 1];
             if (!row) return;
@@ -659,9 +658,24 @@
             markFieldEmpty(row.querySelector('.std'));
         });
 
-        const firstBad = state.missing[0] ? rows[state.missing[0] - 1] : null;
-        if (firstBad) {
-            try { firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+        if (state.duplicates && state.duplicates.length > 0) {
+            messages.push(`Students ${state.duplicates.join(' and ')} appear to be duplicates (same First Name, Surname, Gender and Standard). Please remove the duplicate entry.`);
+            state.duplicates.forEach((idx) => {
+                const row = rows[idx - 1];
+                if (!row) return;
+                row.classList.add('has-error');
+            });
+        }
+
+        if (banner && messages.length > 0) {
+            banner.innerHTML = messages.join('<br>');
+            banner.classList.add('visible');
+        }
+
+        const allBad = [...state.missing, ...(state.duplicates || [])].sort((a, b) => a - b);
+        if (allBad[0]) {
+            const firstBad = rows[allBad[0] - 1];
+            if (firstBad) try { firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
         }
     }
     // ---------- end validation UI ----------
@@ -1273,6 +1287,8 @@
     function collectState() {
         const out = [];
         const missing = [];
+        const duplicateIdxSet = new Set(); // 1-based indices of rows sharing a fingerprint
+        const fingerprintMap  = {};        // fingerprint → first 1-based index seen
         let allValid = true;
         document.querySelectorAll('#student-list .student-block').forEach((row, idx) => {
             const rowId = row.id;
@@ -1282,11 +1298,18 @@
             const std    = row.querySelector('.std').value;
             const vData = videoData[rowId] || {};
             const vId = vData.videoId;
-            // Required: First Name, Surname, Gender, Standard.
-            // Video is OPTIONAL.
             if (!fName || !sName || !gender || !std) {
                 allValid = false;
                 missing.push(idx + 1);
+            } else {
+                const fp = `${fName.toLowerCase()}|${sName.toLowerCase()}|${gender}|${std}`;
+                if (fingerprintMap[fp] !== undefined) {
+                    duplicateIdxSet.add(fingerprintMap[fp]);
+                    duplicateIdxSet.add(idx + 1);
+                    allValid = false;
+                } else {
+                    fingerprintMap[fp] = idx + 1;
+                }
             }
 
             out.push({
@@ -1304,14 +1327,16 @@
             });
         });
 
-        const payload = JSON.stringify(out);          // raw JSON for our storage layers
-        const prettyValue = formatPretty(out);          // clean, human-readable text for Jotform
+        const duplicates  = [...duplicateIdxSet].sort((a, b) => a - b);
+        const payload     = JSON.stringify(out);
+        const prettyValue = formatPretty(out);
 
         return {
             payload,
             prettyValue,
             allValid: allValid && out.length > 0,
             missing,
+            duplicates,
             count: out.length
         };
     }
