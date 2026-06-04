@@ -118,9 +118,8 @@
         <div class="section-title">Students (required)</div>
         <ul>
             <li>Mandatory fields (marked <span class="warn">*</span> in red): <b>First Name</b>, <b>Surname</b>, <b>Gender</b> and <b>Standard</b>. Middle Name and Division are optional.</li>
-            <li>This section is for <b>Standard 8, 9 and 10 girls only</b>.</li>
             <li>Click <b>+ Add Student</b> to add a row (up to <b>10 students</b>). Click <b>Delete Student</b> at the right edge to remove a row.</li>
-            <li>Each student must be <b>unique</b> — two rows with the same First Name, Surname, Gender and Standard will be flagged as duplicates and must be resolved before you can proceed.</li>
+            <li>Each student must be <b>unique</b> — two rows with the same First Name, Surname, Gender and Standard are not allowed.</li>
         </ul>
         <div class="section-title">Musicians <span class="optional">(optional)</span></div>
         <ul>
@@ -219,6 +218,7 @@
     let instanceId = "";
     let uidCounter = 0;
     let musicianCounter = 0;
+    let submitAttempted = false;
 
     function makeUid(preferred) {
         if (preferred && !document.getElementById(preferred)) return preferred;
@@ -330,13 +330,6 @@
         banner.textContent = '✓ No more errors in student data.';
         banner.classList.add('visible', 'success');
     }
-    function refreshBannerState() {
-        const banner = document.getElementById('widget-error-banner');
-        if (!banner || !banner.classList.contains('visible')) return;
-        const state = collectState();
-        if (state.allValid) { if (!banner.classList.contains('success')) showSuccessBanner(); }
-        else if (banner.classList.contains('success')) clearAllErrors();
-    }
     function markFieldEmpty(el) {
         if (!el || (el.value && el.value.trim())) return;
         const w = el.parentElement;
@@ -347,48 +340,69 @@
             w.appendChild(b);
         }
     }
-    function showInlineErrors(state) {
-        clearAllErrors();
+    // Unified validation renderer. Duplicates show IMMEDIATELY; missing-field
+    // errors only after a proceed attempt (submitAttempted).
+    function renderValidation(opts) {
+        const scroll = !!(opts && opts.scroll);
         const banner = document.getElementById('widget-error-banner');
         const rows = document.querySelectorAll('#student-list .student-block');
+        const state = collectState();
+        clearAllErrors();
+
         const messages = [];
 
-        if (state.count === 0) messages.push('Please add at least one student before continuing.');
-
-        if (state.missing.length === 1) {
-            messages.push(`Student ${state.missing[0]} is incomplete. Please fill First Name, Surname, Gender and Standard before continuing.`);
-        } else if (state.missing.length > 1) {
-            messages.push(`Students ${state.missing.join(', ')} are incomplete. Please fill First Name, Surname, Gender and Standard for each before continuing.`);
+        if (submitAttempted) {
+            if (state.count === 0) {
+                messages.push('Please add at least one student before continuing.');
+            } else if (state.missing.length === 1) {
+                messages.push(`Student ${state.missing[0]} is incomplete. Please fill First Name, Surname, Gender and Standard before continuing.`);
+            } else if (state.missing.length > 1) {
+                messages.push(`Students ${state.missing.join(', ')} are incomplete. Please fill First Name, Surname, Gender and Standard for each before continuing.`);
+            }
+            state.missing.forEach((idx) => {
+                const row = rows[idx - 1]; if (!row) return;
+                row.classList.add('has-error');
+                markFieldEmpty(row.querySelector('.fName'));
+                markFieldEmpty(row.querySelector('.sName'));
+                markFieldEmpty(row.querySelector('.gender'));
+                markFieldEmpty(row.querySelector('.std'));
+            });
         }
-        state.missing.forEach((idx) => {
-            const row = rows[idx - 1]; if (!row) return;
-            row.classList.add('has-error');
-            markFieldEmpty(row.querySelector('.fName'));
-            markFieldEmpty(row.querySelector('.sName'));
-            markFieldEmpty(row.querySelector('.gender'));
-            markFieldEmpty(row.querySelector('.std'));
-        });
+
         if (state.duplicates && state.duplicates.length > 0) {
             messages.push(`Students ${state.duplicates.join(' and ')} appear to be duplicates (same First Name, Surname, Gender and Standard). Please remove the duplicate entry.`);
             state.duplicates.forEach((idx) => {
-                const row = rows[idx - 1]; if (!row) return;
-                row.classList.add('has-error');
+                const row = rows[idx - 1]; if (row) row.classList.add('has-error');
             });
         }
-        if (banner && messages.length > 0) { banner.innerHTML = messages.join('<br>'); banner.classList.add('visible'); }
-        const allBad = [...state.missing, ...(state.duplicates || [])].sort((a, b) => a - b);
-        if (allBad[0]) {
-            const firstBad = rows[allBad[0] - 1];
-            if (firstBad) try { firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+
+        if (banner) {
+            if (messages.length > 0) {
+                banner.innerHTML = messages.join('<br>');
+                banner.classList.add('visible');
+                banner.classList.remove('success');
+            } else if (submitAttempted && state.allValid) {
+                showSuccessBanner();
+            }
+        }
+
+        if (scroll) {
+            const allBad = [...state.missing, ...(state.duplicates || [])].sort((a, b) => a - b);
+            if (allBad[0]) {
+                const firstBad = rows[allBad[0] - 1];
+                if (firstBad) try { firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+            }
         }
     }
+    function refreshBannerState() { renderValidation(); }
+    function showInlineErrors() { renderValidation({ scroll: true }); }
     // ---------- end validation UI ----------
 
     function onFieldChange(el) {
         const row = el.closest('.student-block');
         if (row) { clearFieldError(el); if (mandatoryFilled(row)) row.classList.remove('has-error'); }
         sync();
-        refreshBannerState();
+        renderValidation();
     }
 
     function addNewStudent(savedData = null) {
@@ -686,7 +700,8 @@
     JFCustomWidget.subscribe("submit", () => {
         const state = collectState();
         persistAll(state.payload);
-        if (!state.allValid) showInlineErrors(state); else clearAllErrors();
+        submitAttempted = true;
+        renderValidation({ scroll: true });
         JFCustomWidget.sendSubmit({ valid: state.allValid, value: state.prettyValue });
     });
 </script>

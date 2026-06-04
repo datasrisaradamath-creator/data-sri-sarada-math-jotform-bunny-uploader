@@ -284,6 +284,8 @@
             <li>Click <b>+ Add Student</b> to add a new student entry. You can add up to <b>10 students</b>.</li>
             <li>Click <b>Delete Student</b> to remove a student you have added.</li>
             <li>Fill in <b>First Name</b>, <b>Gender</b> and <b>Standard</b> <i>before</i> uploading the video — upload will stay disabled until these are filled.</li>
+            <li>Each student must be <b>unique</b> — two rows with the same First Name, Surname, Gender and Standard are not allowed.</li>
+
             <li>Uploading a video is <b>optional</b> — you can submit without one.</li>
             <li>Maximum upload size is <b>25 MB</b> per video.</li>
             <li>To change a video after uploading, click <b>Replace video</b> next to the green badge. Your previous video stays in place until the new upload succeeds.</li>
@@ -340,6 +342,7 @@
     let formIdForStorage = ""; // Set on ready; used to scope storage keys
     let instanceId = "";       // Unique per widget iframe instance (for storage key)
     let uidCounter = 0;        // Monotonic so add-after-delete never collides
+    let submitAttempted = false; // Missing-field errors only nag after a proceed attempt
 
     // Always returns a fresh, never-before-used uid.
     function makeUid(preferred) {
@@ -600,17 +603,66 @@
     // banner once the user has fixed everything. Until first failure the
     // banner stays hidden — we don't want to nag a user who's still filling
     // the form for the first time.
-    function refreshBannerState() {
+    // Unified validation renderer.
+    //   • Duplicates are surfaced IMMEDIATELY — the user has two complete, colliding
+    //     rows, so there's no reason to wait for a proceed attempt.
+    //   • Missing-field errors only show after submitAttempted, so we don't nag a
+    //     user who is still filling the form for the first time.
+    function renderValidation(opts) {
+        const scroll = !!(opts && opts.scroll);
         const banner = document.getElementById('widget-error-banner');
-        if (!banner || !banner.classList.contains('visible')) return;
-        const state = collectState();
-        if (state.allValid) {
-            if (!banner.classList.contains('success')) showSuccessBanner();
-        } else if (banner.classList.contains('success')) {
-            // User regressed (e.g. emptied a field) — hide the green banner.
-            clearAllErrors();
+        const rows   = document.querySelectorAll('#student-list .student-block');
+        const state  = collectState();
+        clearAllErrors();
+
+        const messages = [];
+
+        if (submitAttempted) {
+            if (state.count === 0) {
+                messages.push('Please add at least one student before continuing.');
+            } else if (state.missing.length === 1) {
+                messages.push(`Student ${state.missing[0]} is incomplete. Please fill First Name, Surname, Gender and Standard before continuing.`);
+            } else if (state.missing.length > 1) {
+                messages.push(`Students ${state.missing.join(', ')} are incomplete. Please fill First Name, Surname, Gender and Standard for each before continuing.`);
+            }
+            state.missing.forEach((idx) => {
+                const row = rows[idx - 1];
+                if (!row) return;
+                row.classList.add('has-error');
+                markFieldEmpty(row.querySelector('.fName'));
+                markFieldEmpty(row.querySelector('.sName'));
+                markFieldEmpty(row.querySelector('.gender'));
+                markFieldEmpty(row.querySelector('.std'));
+            });
+        }
+
+        if (state.duplicates && state.duplicates.length > 0) {
+            messages.push(`Students ${state.duplicates.join(' and ')} appear to be duplicates (same First Name, Surname, Gender and Standard). Please remove the duplicate entry.`);
+            state.duplicates.forEach((idx) => {
+                const row = rows[idx - 1];
+                if (row) row.classList.add('has-error');
+            });
+        }
+
+        if (banner) {
+            if (messages.length > 0) {
+                banner.innerHTML = messages.join('<br>');
+                banner.classList.add('visible');
+                banner.classList.remove('success');
+            } else if (submitAttempted && state.allValid) {
+                showSuccessBanner();
+            }
+        }
+
+        if (scroll) {
+            const allBad = [...state.missing, ...(state.duplicates || [])].sort((a, b) => a - b);
+            if (allBad[0]) {
+                const firstBad = rows[allBad[0] - 1];
+                if (firstBad) try { firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+            }
         }
     }
+    function refreshBannerState() { renderValidation(); }
     function markFieldEmpty(el) {
         if (!el || (el.value && el.value.trim())) return;
         const wrapper = el.parentElement;
@@ -632,53 +684,7 @@
         badge.textContent = 'A video upload is required';
         area.appendChild(badge);
     }
-    function showInlineErrors(state) {
-        clearAllErrors();
-
-        const banner = document.getElementById('widget-error-banner');
-        const rows   = document.querySelectorAll('#student-list .student-block');
-        const messages = [];
-
-        if (state.count === 0) {
-            messages.push('Please add at least one student before continuing.');
-        }
-
-        if (state.missing.length === 1) {
-            messages.push(`Student ${state.missing[0]} is incomplete. Please fill First Name, Surname, Gender and Standard before continuing.`);
-        } else if (state.missing.length > 1) {
-            messages.push(`Students ${state.missing.join(', ')} are incomplete. Please fill First Name, Surname, Gender and Standard for each before continuing.`);
-        }
-
-        state.missing.forEach((idx) => {
-            const row = rows[idx - 1];
-            if (!row) return;
-            row.classList.add('has-error');
-            markFieldEmpty(row.querySelector('.fName'));
-            markFieldEmpty(row.querySelector('.sName'));
-            markFieldEmpty(row.querySelector('.gender'));
-            markFieldEmpty(row.querySelector('.std'));
-        });
-
-        if (state.duplicates && state.duplicates.length > 0) {
-            messages.push(`Students ${state.duplicates.join(' and ')} appear to be duplicates (same First Name, Surname, Gender and Standard). Please remove the duplicate entry.`);
-            state.duplicates.forEach((idx) => {
-                const row = rows[idx - 1];
-                if (!row) return;
-                row.classList.add('has-error');
-            });
-        }
-
-        if (banner && messages.length > 0) {
-            banner.innerHTML = messages.join('<br>');
-            banner.classList.add('visible');
-        }
-
-        const allBad = [...state.missing, ...(state.duplicates || [])].sort((a, b) => a - b);
-        if (allBad[0]) {
-            const firstBad = rows[allBad[0] - 1];
-            if (firstBad) try { firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
-        }
-    }
+    function showInlineErrors() { renderValidation({ scroll: true }); }
     // ---------- end validation UI ----------
 
     // Single change handler used by every input/select in a student block
@@ -1549,11 +1555,8 @@
         console.log('[StudentWidget] submit — valid=%s count=%s missing=%o',
             state.allValid, state.count, state.missing);
 
-        if (!state.allValid) {
-            showInlineErrors(state);
-        } else {
-            clearAllErrors();
-        }
+        submitAttempted = true;
+        renderValidation({ scroll: true });
 
         JFCustomWidget.sendSubmit({
             valid: state.allValid,
