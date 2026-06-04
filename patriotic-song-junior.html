@@ -92,7 +92,9 @@
         .widget-error-banner.success {
             background: #f0fdf4; border-color: #86efac; border-left-color: #16a34a; color: #14532d;
         }
-        .student-block.has-error { border-color: #fc8181; box-shadow: 0 0 0 3px rgba(252,129,129,0.18); }
+        .student-block.has-error, .musician-block.has-error { border-color: #fc8181; box-shadow: 0 0 0 3px rgba(252,129,129,0.18); }
+        .musician-block .mreq { display: none; }
+        .musician-block.has-data .mreq { display: inline; }
         .field-error input, .field-error select {
             border-color: #fc8181 !important; background: #fff5f5 !important;
             box-shadow: 0 0 0 2px rgba(252,129,129,0.18);
@@ -123,10 +125,10 @@
         </ul>
         <div class="section-title">Musicians <span class="optional">(optional)</span></div>
         <ul>
-            <li>Musicians are <b>optional</b> — leave the section empty if you have none.</li>
-            <li>Up to <b>2 musicians</b> can be entered. Click <b>+ Add Musician</b> to add a row and <b>Delete Musician</b> to remove one.</li>
+            <li>Optional — leave the section empty if you have none (up to <b>2 musicians</b>).</li>
+            <li>If you add a musician, fill all required fields: <b>First Name</b>, <b>Surname</b>, <b>Participant</b> (Student/Teacher), <b>Gender</b> and <b>Standard</b> (teachers can pick <b>NA</b>). Middle Name and Division are optional.</li>
         </ul>
-        <p class="warn" style="margin:8px 0 0 0;">You won't be able to proceed if any student row has a mandatory field left blank or if duplicate student entries are detected.</p>
+        <p class="warn" style="margin:8px 0 0 0;">You can't proceed if a student row has a mandatory field blank, if students are duplicated, or if a musician row is started but missing a required field.</p>
     </div>
 
     <div id="widget-error-banner" class="widget-error-banner" role="alert"></div>
@@ -185,28 +187,35 @@
     <div class="musician-block" id="MUSICIAN_TEMPLATE">
         <div class="student-count-badge">Musician</div>
         <div class="name-row musician-name">
-            <div><label>First Name</label><input type="text" class="mFName" oninput="sync()"></div>
-            <div><label>Middle Name</label><input type="text" class="mMName" oninput="sync()"></div>
-            <div><label>Surname</label><input type="text" class="mSName" oninput="sync()"></div>
+            <div><label>First Name<span class="mreq">*</span></label><input type="text" class="mFName" oninput="onFieldChange(this)"></div>
+            <div><label>Middle Name</label><input type="text" class="mMName" oninput="onFieldChange(this)"></div>
+            <div><label>Surname<span class="mreq">*</span></label><input type="text" class="mSName" oninput="onFieldChange(this)"></div>
         </div>
         <div class="meta-row musician-meta">
-            <div><label>Participant</label><input type="text" class="mPart" oninput="sync()"></div>
-            <div><label>Gender</label>
-                <select class="mGender" onchange="sync()">
+            <div><label>Participant<span class="mreq">*</span></label>
+                <select class="mPart" onchange="onFieldChange(this)">
+                    <option value="">Select</option>
+                    <option value="Student">Student</option>
+                    <option value="Teacher">Teacher</option>
+                </select>
+            </div>
+            <div><label>Gender<span class="mreq">*</span></label>
+                <select class="mGender" onchange="onFieldChange(this)">
                     <option value="">Select</option>
                     <option value="Boy">Boy</option>
                     <option value="Girl">Girl</option>
                 </select>
             </div>
-            <div><label>Standard</label>
-                <select class="mStd" onchange="sync()">
+            <div><label>Standard<span class="mreq">*</span></label>
+                <select class="mStd" onchange="onFieldChange(this)">
                     <option value="">Select</option>
+                    <option value="NA">NA (teacher)</option>
                     <option value="5">5</option>
                     <option value="6">6</option>
                     <option value="7">7</option>
                 </select>
             </div>
-            <div><label>Division</label><input type="text" class="mDiv" oninput="sync()"></div>
+            <div><label>Division</label><input type="text" class="mDiv" oninput="onFieldChange(this)"></div>
         </div>
         <div class="musician-del-row"><div class="del-col"></div></div>
     </div>
@@ -324,7 +333,7 @@
     function clearAllErrors() {
         const banner = document.getElementById('widget-error-banner');
         if (banner) { banner.classList.remove('visible', 'success'); banner.textContent = ''; }
-        document.querySelectorAll('.student-block.has-error').forEach(r => r.classList.remove('has-error'));
+        document.querySelectorAll('.student-block.has-error, .musician-block.has-error').forEach(r => r.classList.remove('has-error'));
         document.querySelectorAll('.field-error').forEach(el => el.classList.remove('field-error'));
         document.querySelectorAll('.field-error-badge').forEach(el => el.remove());
     }
@@ -383,13 +392,29 @@
             });
         }
 
+        if (includeMissing && state.musicianMissing && state.musicianMissing.length > 0) {
+            const mrows = document.querySelectorAll('#musician-list .musician-block');
+            if (state.musicianMissing.length === 1) {
+                messages.push(`Musician ${state.musicianMissing[0]} is incomplete. A musician needs First Name, Surname, Participant, Gender and Standard — or leave the row empty.`);
+            } else {
+                messages.push(`Musicians ${state.musicianMissing.join(', ')} are incomplete. Each needs First Name, Surname, Participant, Gender and Standard — or leave the row empty.`);
+            }
+            state.musicianMissing.forEach((idx) => {
+                const row = mrows[idx - 1]; if (!row) return;
+                row.classList.add('has-error');
+                markFieldEmpty(row.querySelector('.mFName'));
+                markFieldEmpty(row.querySelector('.mSName'));
+                markFieldEmpty(row.querySelector('.mPart'));
+                markFieldEmpty(row.querySelector('.mGender'));
+                markFieldEmpty(row.querySelector('.mStd'));
+            });
+        }
+
         if (banner) {
             if (messages.length > 0) {
                 banner.innerHTML = messages.join('<br>');
                 banner.classList.add('visible');
                 banner.classList.remove('success');
-            } else if (submitAttempted && state.allValid) {
-                showSuccessBanner();
             }
         }
 
@@ -506,16 +531,20 @@
                 const fn = String(m.firstName || '').trim();
                 const mn = String(m.middleName || '').trim();
                 const sn = String(m.surname || '').trim();
-                const fullName = [fn, mn, sn].filter(Boolean).join(' ') || '(not specified)';
-                const classDisplay = m.standard
-                    ? (m.division ? `${m.standard} (Division ${m.division})` : `${m.standard}`)
-                    : '';
+                // A musician shown here has some data, so its required fields
+                // (Name, Participant, Gender) must read "(not provided)" when blank
+                // — this is the sentinel that blocks navigation until resolved.
+                const fullName = (fn && sn) ? [fn, mn, sn].filter(Boolean).join(' ') : '(not provided)';
+                let classDisplay;
+                if (!m.standard) classDisplay = '(not provided)';
+                else if (m.standard === 'NA') classDisplay = 'NA';
+                else classDisplay = m.division ? `${m.standard} (Division ${m.division})` : `${m.standard}`;
                 lines.push("");
                 lines.push(`Musician ${i + 1}`);
                 lines.push(`Name: ${fullName}`);
-                if (m.participant) lines.push(`Participant: ${m.participant}`);
-                if (m.gender) lines.push(`Gender: ${m.gender}`);
-                if (classDisplay) lines.push(`Class: ${classDisplay}`);
+                lines.push(`Participant: ${m.participant || '(not provided)'}`);
+                lines.push(`Gender: ${m.gender || '(not provided)'}`);
+                lines.push(`Class: ${classDisplay}`);
             });
         }
         return lines.join("\n");
@@ -549,8 +578,9 @@
         });
 
         const allMusicians = [];
-        document.querySelectorAll('#musician-list .musician-block').forEach((row) => {
-            allMusicians.push({
+        const musicianMissing = [];
+        document.querySelectorAll('#musician-list .musician-block').forEach((row, idx) => {
+            const m = {
                 uid: row.id,
                 firstName:  row.querySelector('.mFName').value.trim(),
                 middleName: row.querySelector('.mMName').value.trim(),
@@ -559,7 +589,15 @@
                 gender:     row.querySelector('.mGender').value,
                 standard:   row.querySelector('.mStd').value,
                 division:   row.querySelector('.mDiv').value.trim()
-            });
+            };
+            allMusicians.push(m);
+            // Musicians are optional, but once a row has any data it must complete
+            // its required fields: First Name, Surname, Participant, Gender and
+            // Standard (teachers can pick "NA").
+            if (hasMusicianData(m) && (!m.firstName || !m.surname || !m.participant || !m.gender || !m.standard)) {
+                musicianMissing.push(idx + 1);
+                allValid = false;
+            }
         });
         const musicians = allMusicians.filter(hasMusicianData);
 
@@ -569,15 +607,36 @@
         if (duplicates.length > 0) {
             prettyValue = `Duplicate student entries detected: Student ${duplicates.join(', ')} have identical details. Please remove the duplicate before continuing. (not provided)\n\n` + prettyValue;
         }
+        if (musicianMissing.length > 0) {
+            prettyValue = `Incomplete musician entries detected: Musician ${musicianMissing.join(', ')} must have First Name, Surname, Participant, Gender and Standard (or be left empty). (not provided)\n\n` + prettyValue;
+        }
         return {
             payload, prettyValue,
             allValid: allValid && students.length > 0,
-            missing, duplicates, count: students.length
+            missing, duplicates, musicianMissing, count: students.length
         };
+    }
+
+    // Show the red "*" required marks on a musician row only once it has data —
+    // an untouched (empty) musician is optional, so no asterisks are shown.
+    function refreshMusicianMarks() {
+        document.querySelectorAll('#musician-list .musician-block').forEach((row) => {
+            const has = !!(
+                row.querySelector('.mFName').value.trim() ||
+                row.querySelector('.mMName').value.trim() ||
+                row.querySelector('.mSName').value.trim() ||
+                row.querySelector('.mPart').value.trim() ||
+                row.querySelector('.mGender').value ||
+                row.querySelector('.mStd').value ||
+                row.querySelector('.mDiv').value.trim()
+            );
+            row.classList.toggle('has-data', has);
+        });
     }
 
     function sync() {
         if (!isReady) return;
+        refreshMusicianMarks();
         const { payload, prettyValue, allValid } = collectState();
         persistAll(payload);
         JFCustomWidget.sendData({ valid: allValid, value: prettyValue });
