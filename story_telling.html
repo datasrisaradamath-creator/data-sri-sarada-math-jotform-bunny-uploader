@@ -83,8 +83,9 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
-        .name-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
-        .meta-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; align-items: end; }
+        .name-row { display: grid; grid-template-columns: 1fr 1fr 1fr 150px; gap: 12px; }
+        .meta-row { display: grid; grid-template-columns: 1fr 1fr 1fr 150px; gap: 12px; align-items: end; }
+        .del-col { display: flex; align-items: flex-end; justify-content: flex-end; }
 
         @media screen and (max-width: 650px) {
             .name-row, .meta-row { grid-template-columns: 1fr; }
@@ -1329,7 +1330,13 @@
 
         const duplicates  = [...duplicateIdxSet].sort((a, b) => a - b);
         const payload     = JSON.stringify(out);
-        const prettyValue = formatPretty(out);
+        let prettyValue   = formatPretty(out);
+        // Duplicates have all fields filled, so they don't emit "(not provided)"
+        // on their own. Inject the sentinel so the JotForm "Contains (not provided)"
+        // condition blocks navigation just like it does for missing fields.
+        if (duplicates.length > 0) {
+            prettyValue = `Duplicate student entries detected: Student ${duplicates.join(', ')} have identical details. Please remove the duplicate before continuing. (not provided)\n\n` + prettyValue;
+        }
 
         return {
             payload,

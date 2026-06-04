@@ -9,6 +9,17 @@
 
         #widget-wrap { display: flex; flex-direction: column; gap: 20px; width: 100%; box-sizing: border-box; }
 
+        .instructions-box {
+            background: #fffbe6; border: 1px solid #f1d56e; border-left: 4px solid #f5a623;
+            border-radius: 8px; padding: 14px 16px; font-size: 13px; color: #5b4a16; line-height: 1.55;
+        }
+        .instructions-box h4 { margin: 0 0 8px 0; font-size: 14px; color: #7a5b0d; }
+        .instructions-box .section-title { margin: 10px 0 4px 0; font-weight: 700; color: #7a5b0d; }
+        .instructions-box ul { margin: 0; padding-left: 20px; }
+        .instructions-box li { margin-bottom: 4px; }
+        .instructions-box .warn { color: #b54708; font-weight: 700; }
+        .instructions-box .optional { color: #2d5f1f; font-weight: 700; }
+
         #student-list, #musician-list { display: flex; flex-direction: column; gap: 30px; width: 100%; }
 
         .student-block, .musician-block {
@@ -31,13 +42,15 @@
         .section-divider hr { flex: 1; border: none; border-top: 1px solid #e2e8f0; }
         .section-divider span { font-size: 13px; font-weight: 700; white-space: nowrap; }
 
-        .name-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
-        .meta-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; align-items: end; }
+        .name-row { display: grid; grid-template-columns: 1fr 1fr 1fr 150px; gap: 12px; }
+        .meta-row { display: grid; grid-template-columns: 1fr 1fr 1fr 150px; gap: 12px; align-items: end; }
+        .del-col { display: flex; align-items: flex-end; justify-content: flex-end; }
+        .musician-name { grid-template-columns: 1fr 1fr 1fr 1fr; }
         .musician-meta { grid-template-columns: 1fr 1fr 1fr 1fr; }
         .musician-del-row { display: flex; justify-content: flex-end; }
 
         @media screen and (max-width: 650px) {
-            .name-row, .meta-row, .musician-meta { grid-template-columns: 1fr; }
+            .name-row, .meta-row, .musician-name, .musician-meta { grid-template-columns: 1fr; }
             .ref-delete-btn { width: 100%; justify-content: center; }
         }
 
@@ -99,6 +112,24 @@
 <body>
 
 <div id="widget-wrap">
+    <div class="instructions-box">
+        <h4>How to fill this section</h4>
+        <p style="margin:0 0 6px 0;">This competition has <b>two parts</b>: a Student section (singers) and an optional Musician section (instrumentalists).</p>
+        <div class="section-title">Students (required)</div>
+        <ul>
+            <li>Mandatory fields (marked <span class="warn">*</span> in red): <b>First Name</b>, <b>Surname</b>, <b>Gender</b> and <b>Standard</b>. Middle Name and Division are optional.</li>
+            <li>This section is for <b>Standard 8, 9 and 10 girls only</b>.</li>
+            <li>Click <b>+ Add Student</b> to add a row (up to <b>10 students</b>). Click <b>Delete Student</b> at the right edge to remove a row.</li>
+            <li>Each student must be <b>unique</b> — two rows with the same First Name, Surname, Gender and Standard will be flagged as duplicates and must be resolved before you can proceed.</li>
+        </ul>
+        <div class="section-title">Musicians <span class="optional">(optional)</span></div>
+        <ul>
+            <li>Musicians are <b>optional</b> — leave the section empty if you have none.</li>
+            <li>Up to <b>2 musicians</b> can be entered. Click <b>+ Add Musician</b> to add a row and <b>Delete Musician</b> to remove one.</li>
+        </ul>
+        <p class="warn" style="margin:8px 0 0 0;">You won't be able to proceed if any student row has a mandatory field left blank or if duplicate student entries are detected.</p>
+    </div>
+
     <div id="widget-error-banner" class="widget-error-banner" role="alert"></div>
 
     <!-- Student section -->
@@ -152,7 +183,7 @@
     <!-- Musician template -->
     <div class="musician-block" id="MUSICIAN_TEMPLATE">
         <div class="student-count-badge">Musician</div>
-        <div class="name-row">
+        <div class="name-row musician-name">
             <div><label>First Name</label><input type="text" class="mFName" oninput="sync()"></div>
             <div><label>Middle Name</label><input type="text" class="mMName" oninput="sync()"></div>
             <div><label>Surname</label><input type="text" class="mSName" oninput="sync()"></div>
@@ -246,7 +277,9 @@
         const rows = document.querySelectorAll('#student-list .student-block');
         rows.forEach((row, i) => {
             row.querySelector('.student-count-badge').innerText = `Student ${i + 1}`;
-            row.querySelector('.del-col').innerHTML = `<button type="button" class="ref-delete-btn" onclick="removeRow('${row.id}')" ${rows.length <= 1 ? 'style="visibility:hidden;"' : ''}>${TRASH_ICON} Delete Student</button>`;
+            row.querySelector('.del-col').innerHTML = (rows.length > 1)
+                ? `<button type="button" class="ref-delete-btn" onclick="removeRow('${row.id}')">${TRASH_ICON} Delete Student</button>`
+                : '';
         });
         const count = rows.length;
         const atLimit = count >= MAX_STUDENTS;
@@ -452,7 +485,7 @@
                 const fn = String(m.firstName || '').trim();
                 const mn = String(m.middleName || '').trim();
                 const sn = String(m.surname || '').trim();
-                const fullName = [fn, mn, sn].filter(Boolean).join(' ') || '(not provided)';
+                const fullName = [fn, mn, sn].filter(Boolean).join(' ') || '(not specified)';
                 const classDisplay = m.standard
                     ? (m.division ? `${m.standard} (Division ${m.division})` : `${m.standard}`)
                     : '';
@@ -494,9 +527,9 @@
             });
         });
 
-        const musicians = [];
+        const allMusicians = [];
         document.querySelectorAll('#musician-list .musician-block').forEach((row) => {
-            musicians.push({
+            allMusicians.push({
                 uid: row.id,
                 firstName:  row.querySelector('.mFName').value.trim(),
                 middleName: row.querySelector('.mMName').value.trim(),
@@ -507,10 +540,14 @@
                 division:   row.querySelector('.mDiv').value.trim()
             });
         });
+        const musicians = allMusicians.filter(hasMusicianData);
 
         const duplicates  = [...duplicateIdxSet].sort((a, b) => a - b);
         const payload     = JSON.stringify({ students, musicians });
-        const prettyValue = formatPretty(students, musicians);
+        let prettyValue   = formatPretty(students, musicians);
+        if (duplicates.length > 0) {
+            prettyValue = `Duplicate student entries detected: Student ${duplicates.join(', ')} have identical details. Please remove the duplicate before continuing. (not provided)\n\n` + prettyValue;
+        }
         return {
             payload, prettyValue,
             allValid: allValid && students.length > 0,
@@ -538,7 +575,7 @@
 
     function parsePrettyText(raw) {
         if (typeof raw !== 'string') return null;
-        const valOrEmpty = (v) => (!v || v === '(not provided)') ? '' : v;
+        const valOrEmpty = (v) => (!v || v === '(not provided)' || v === '(not specified)') ? '' : v;
 
         function parseNameClass(fields, entry) {
             if (fields['name']) {
@@ -634,12 +671,16 @@
         const layers = loadAny();
         const saved  = fromJotform || layers.fromWindowName || layers.fromSession || "";
         if (!restoreFromValue(saved)) addNewStudent();
+        if (musicianCount() === 0) addNewMusician();
         refreshIndices(); refreshMusicianIndices(); sync();
     });
 
     JFCustomWidget.subscribe("populate", (data) => {
         const saved = (data && (data.value || (data.fieldData && data.fieldData.value))) || '';
-        if (saved && restoreFromValue(saved)) { refreshIndices(); refreshMusicianIndices(); sync(); }
+        if (saved && restoreFromValue(saved)) {
+            if (musicianCount() === 0) addNewMusician();
+            refreshIndices(); refreshMusicianIndices(); sync();
+        }
     });
 
     JFCustomWidget.subscribe("submit", () => {

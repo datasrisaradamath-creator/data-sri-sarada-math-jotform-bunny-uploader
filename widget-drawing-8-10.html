@@ -9,6 +9,15 @@
 
         #widget-wrap { display: flex; flex-direction: column; gap: 20px; width: 100%; box-sizing: border-box; }
 
+        .instructions-box {
+            background: #fffbe6; border: 1px solid #f1d56e; border-left: 4px solid #f5a623;
+            border-radius: 8px; padding: 14px 16px; font-size: 13px; color: #5b4a16; line-height: 1.55;
+        }
+        .instructions-box h4 { margin: 0 0 8px 0; font-size: 14px; color: #7a5b0d; }
+        .instructions-box ul { margin: 0; padding-left: 20px; }
+        .instructions-box li { margin-bottom: 4px; }
+        .instructions-box .warn { color: #b54708; font-weight: 700; }
+
         #student-list { display: flex; flex-direction: column; gap: 30px; width: 100%; }
 
         .student-block {
@@ -29,8 +38,9 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
-        .name-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
-        .meta-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; align-items: end; }
+        .name-row { display: grid; grid-template-columns: 1fr 1fr 1fr 150px; gap: 12px; }
+        .meta-row { display: grid; grid-template-columns: 1fr 1fr 1fr 150px; gap: 12px; align-items: end; }
+        .del-col { display: flex; align-items: flex-end; justify-content: flex-end; }
 
         @media screen and (max-width: 650px) {
             .name-row, .meta-row { grid-template-columns: 1fr; }
@@ -98,6 +108,18 @@
 <body>
 
 <div id="widget-wrap">
+    <div class="instructions-box">
+        <h4>How to fill this section</h4>
+        <ul>
+            <li>Mandatory fields (marked <span class="warn">*</span> in red): <b>First Name</b>, <b>Surname</b>, <b>Gender</b> and <b>Standard</b>. Middle Name and Division are optional.</li>
+            <li>This section is for <b>Standard 8, 9 and 10 girls only</b>.</li>
+            <li>Click <b>+ Add Student</b> to add a row. You can add up to <b>25 students</b>.</li>
+            <li>To remove a student, click <b>Delete Student</b> at the right edge of that row.</li>
+            <li>Each student must be <b>unique</b> — two rows with the same First Name, Surname, Gender and Standard will be flagged as duplicates and must be resolved before you can proceed.</li>
+            <li class="warn">You won't be able to proceed if any student row has a mandatory field left blank or if duplicate entries are detected.</li>
+        </ul>
+    </div>
+
     <div id="widget-error-banner" class="widget-error-banner" role="alert"></div>
     <div id="student-list"></div>
     <div class="footer-row">
@@ -386,7 +408,10 @@
 
         const duplicates  = [...duplicateIdxSet].sort((a, b) => a - b);
         const payload     = JSON.stringify(out);
-        const prettyValue = formatPretty(out);
+        let prettyValue   = formatPretty(out);
+        if (duplicates.length > 0) {
+            prettyValue = `Duplicate student entries detected: Student ${duplicates.join(', ')} have identical details. Please remove the duplicate before continuing. (not provided)\n\n` + prettyValue;
+        }
         return { payload, prettyValue, allValid: allValid && out.length > 0, missing, duplicates, count: out.length };
     }
 
