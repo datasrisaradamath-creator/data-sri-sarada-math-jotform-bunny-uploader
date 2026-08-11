@@ -47,8 +47,8 @@
             color: #b54708;
             font-weight: 700;
         }
-        .instructions-box .submit-video-note {
-            margin: 12px 0 0;
+        .submit-video-note {
+            margin: 10px 0 0;
             padding: 10px 12px;
             border-left: 4px solid #16a34a;
             border-radius: 6px;
@@ -528,6 +528,7 @@
                     <div class="uploaded-badge">✓ Video Uploaded</div>
                     <button type="button" class="edit-upload-btn" onclick="startReplaceUpload('${uid}')">Replace video</button>
                 </div>
+                <div class="submit-video-note">Important: After you finish uploading videos, please SUBMIT the form to register those videos!</div>
                 ${playerUrl ? `
                     <div class="video-thumbnail" id="vt-${uid}">
                         <iframe src="${playerUrl}"
